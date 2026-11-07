@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 /*
- * Waveshare SK-18 (Allwinner T113-S3, 512 MiB DDR3, SD card boot).
+ * Waveshare SK-18 (Allwinner T113-S3, 128 MiB DDR3 in the package, SD card boot).
  *
  * First bring-up version: console, SD card, USB (device port and host port). Display, touch,
  * audio and the rest are added from evidence in later steps.

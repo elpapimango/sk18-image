@@ -1,4 +1,4 @@
-# Waveshare SK-18 (Allwinner T113-S3, 2x Cortex-A7, 512 MiB DDR3): mainline U-Boot + Linux.
+# Waveshare SK-18 (Allwinner T113-S3, 2x Cortex-A7, 128 MiB DDR3 in the package): mainline U-Boot + Linux.
 # Build:  make BR2_EXTERNAL=<repo>/br2-external O=<out> waveshare_sk18_defconfig && make O=<out>
 # See board/waveshare/sk18/README.md.
 

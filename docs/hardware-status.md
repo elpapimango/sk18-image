@@ -1,15 +1,15 @@
 # Hardware status of the mainline image
 
 Build `9fdda5c6…7e0f9` (`sdcard.img`, 2026-11-07): Buildroot `60a3423e95`, Linux 7.3.1, U-Boot 2026.10.
-"Built" means it compiles and the image contents were checked; nothing here has been tested on the board yet.
+"Built" means it compiles and the image contents were checked. "Works" means observed on the board on 2026-11-07 (D-013): it boots from the test SD card and runs a shell on the USB serial gadget.
 
 | Hardware block | Original system | Mainline support | Required driver / DT node | Firmware | Test result | Remaining issue |
 |---|---|---|---|---|---|---|
-| DRAM init (SPL) | vendor boot0, DDR3 792 MHz | U-Boot 2026.10 `mangopi_mq_r` has the same parameters | `CONFIG_DRAM_*` | none | not tested | TPR1-3/6 left at defaults; verify memory stability |
+| DRAM init (SPL) | vendor boot0, DDR3 792 MHz | U-Boot 2026.10 `mangopi_mq_r` has the same parameters | `CONFIG_DRAM_*` | none | **works**: SPL ran, 128 MiB detected (131072K, 114 MB usable after CMA), stable for 3+ minutes | TPR1-3/6 left at defaults; run a memory stress test |
 | UART3 console | PB6/PB7, 115200 | yes (8250 DW) | `&uart3` | none | not tested | header location on the board unknown |
-| SD card | mmc0, 4-bit, CD = PF6 low | yes | `&mmc0` | none | not tested | supply rail assumed 3.3 V |
-| USB device port (OTG) | CDC-ACM gadget to the host | yes (musb) | `&usb_otg`, `&usbphy` | none | not tested | built-in `g_serial` for the first test |
-| USB host port | ehci1/ohci1 | yes | `&ehci1`, `&ohci1` | none | not tested | VBUS control GPIO unknown (always on assumed) |
+| SD card | mmc0, 4-bit, CD = PF6 low | yes | `&mmc0` | none | **works**: 3.75 GiB SDHC detected at high speed, root mounted read-write, card-detect GPIO found | supply rail assumed 3.3 V |
+| USB device port (OTG) | CDC-ACM gadget to the host | yes (musb) | `&usb_otg`, `&usbphy` | none | **works**: `g_serial` enumerates on the host as `0525:a4a7` ("Linux 7.3.1 with musb-hdrc"), login prompt on `ttyGS0` | stock `1d6b:0104` port is gone while this image runs |
+| USB host port | ehci1/ohci1 | yes | `&ehci1`, `&ohci1` | none | controllers registered (`ehci-platform 4200000.usb`, `ohci-platform 4200400.usb`); no device enumerated yet | VBUS control GPIO unknown (always on assumed); test with the Wi-Fi adapter |
 | Wi-Fi RTL8188GU (`0bda:b711` after switch) | rtlwifi module | `rtl8xxxu` binds on the DietPi (Linux 6.18) | `CONFIG_RTL8XXXU` | `rtlwifi/rtl8710bufw_SMIC.bin` | not in this image yet | mode switch (`0bda:1a2b` CD-ROM) needs a udev rule |
 | Display 720x1280 | lcd0, interface type 4 (probably DSI, 2 lanes) | DE2 mixer and LCD TCON for D1 exist; no D1 compatible found in the MIPI-DSI driver | `de`, `tcon_lcd0`, `dsi`, panel | none | not in this image | main risk: panel interface and init sequence |
 | Backlight | PWM channel 3, 1 kHz | PWM driver exists | `pwm`, `pwm-backlight` | none | not in this image | enable GPIO unknown |

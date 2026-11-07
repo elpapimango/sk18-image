@@ -78,7 +78,7 @@ Decompiled with `dtc -I dtb -O dts` (about 127 warnings, mostly vendor-style nod
 
 | Block | Finding | Status |
 |---|---|---|
-| CPU/RAM | Cortex-A7, 512 MiB at `0x40000000` | Confirmed |
+| CPU/RAM | 2x Cortex-A7; RAM at `0x40000000`. The vendor DTB memory node says 512 MiB, but that is a template: the running mainline kernel reports 128 MiB (131072K), which is what the T113-S3 has in its package | Corrected 2026-11-07 (measured on the board, D-013) |
 | Console | UART3 on PB6/PB7 `okay`; UART0 `disabled`; `chosen` says `console=ttyS0` but inittab uses `ttyS3` | Confirmed, conflict to resolve on hardware |
 | SD card | `sdmmc@4020000` (SDC0), 4-bit, high-speed, card-detect GPIO | Confirmed |
 | USB | OTG (`usbc0`, ID and VBUS-detect GPIOs), EHCI0/OHCI0 enabled | Confirmed |

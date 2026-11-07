@@ -78,3 +78,11 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - **Not yet done:** boot the SK-18 from this card.
 - **What to expect and look for:** the screen stays dark (no display driver in this image; that is not a failure). The SK-18's USB hub and HID chip (`4250:426f`) still appear on the host. If the kernel boots, a new `g_serial` device (`0525:a4a7`, `/dev/ttyACM*`) appears with a login prompt; the stock `1d6b:0104` serial port does not appear.
 - **Roll back:** put the original or backup card back in the SK-18.
+
+## D-013 The mainline image boots on the SK-18 (2026-11-07)
+- **Observed:** with the test card in the SK-18, about 6 seconds after the internal USB hub appeared, the host (DietPi machine) enumerated a new device `0525:a4a7`, product "Gadget Serial v2.4", manufacturer "Linux 7.3.1 with musb-hdrc", as `/dev/ttyACM0`. Logging in as `root` (empty password) on it gives a shell on `sk18`.
+- **Measured over that shell:** Linux 7.3.1 `armv7l`, 2 CPUs (Cortex-A7, part 0xc07), command line as in `extlinux.conf`, root `ext4` on `mmcblk0p1` (rw), SD card 3.75 GiB high speed, **RAM 131072K (128 MiB)**, 98 MB free after boot, SoC temperature 27 C, no cpufreq driver (fixed clock), only kernel warning "GPT: Use GNU Parted to correct GPT errors" (the image has no backup GPT by design). EHCI/OHCI at `4200000`/`4200400` registered; musb UDC at `4100000`; `g_serial` ready.
+- **Correction:** RAM is 128 MiB, not 512 MiB. The vendor DTB memory node (512 MiB) is a template; the T113-S3 has 128 MiB DDR3 in its package. Docs, defconfig comment and DTS comment fixed.
+- **Meaning:** mainline SPL DRAM init (parameters from the MQ-R base, equal to the original boot0 header), U-Boot, the kernel, the board DTS (UART3, mmc0, USB OTG as peripheral), the SD card and the USB gadget all work on this board. The UART3 header was not needed.
+- **Not working or not yet in the image:** display (screen stays dark), backlight, touch, Wi-Fi, audio, anything key-related. The stock serial protocol is gone while this card runs, so the gateway shows the SK-18 as detached.
+- **Tools used:** `serial_sh.py`-style login over `/dev/ttyACM0` from the DietPi machine (read-only commands). Rollback: put the original or backup card back.

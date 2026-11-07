@@ -66,6 +66,12 @@ OpenWrt/Tina userland with procd, busybox ash, wpa_supplicant, dnsmasq, adbd, db
 - `KeyboardDevice` references `/dev/ttyGS0` (USB gadget serial), `/dev/ttyS1`, `/dev/fb0`, `/dev/disp`, `/dev/g2d`, `/dev/ion`, and **`/dev/atsha204a`** (a Microchip ATSHA204A secure-element interface). Its JSON `method` handlers include `handleGetInfo`, `handleSetVolume`, `handlePlayAudio`, `handleStopAudio`, `handleSaveToFile`, `handleSetFileCRC`, `handleDeleteFiles` and `handleSetBacklight`. Commands include `SHOW_JPG`, `GET_DEVICE_SCREENMESSAGE` and `REQUEST_UPLOAD_KEY`.
 - The ATSHA204A is probably used for licensing or authentication. The replacement must not depend on it or try to bypass it.
 
+## Vendor SDK and Wi-Fi notes (Confirmed from `~/Tina-Linux`)
+
+- The SDK has T113 boards `t113-evb1` and `t113-mq_r`, kernel `lichee/linux-5.4`, and `brandy-2.0` for boot0/U-Boot. No SK18 board files, `SYK` or `5inch_720x1280` strings are in it, so the SK-18 DTS/panel config exists only in the shipped image.
+- The vendor kernel has Goodix touch drivers (`goodix.c`, `gt9xxnew`) and many `disp2` LCD panel files; the `lcd0` parameters in the SK18 DTB select the generic `default_lcd` driver.
+- The vendor kernel ships the Realtek `rtl8189fs`, `rtl8723ds`, `rtl8821cs` and `rtl8xxxu` drivers; the stock image has an `rtlwifi` modules directory. RTL8188GU support in mainline is not confirmed: web sources describe `rtl8xxxu` as covering "RTL8710BU (aka RTL8188GU)" and mention a USB mode-switch (CD-ROM mode) quirk. The exact USB ID of the supplied adapter is needed to confirm.
+
 ## Board device tree (from the U-Boot package DTB, `model = "SK18"`)
 
 Decompiled with `dtc -I dtb -O dts` (about 127 warnings, mostly vendor-style nodes that are not standard bindings). Compatible: `allwinner,t113`, `allwinner,r528`, `arm,sun8iw20p1`.

@@ -1,0 +1,12 @@
+# U-Boot options on top of mangopi_mq_r_defconfig (MangoPi MQ-R, Allwinner T113-S3).
+#
+# The base defconfig already carries the DRAM setup, and it matches the original SK-18 boot0
+# header word for word (see docs/phase3-boot-chain.md): DRAM_CLK 792 MHz, DDR3, ZQ 0x7b7bfb,
+# ODT off, TPR0 0x004a2195, TPR11 0x340000, TPR12 0x46, TPR13 0x34000100, console UART3.
+#
+# Only differences from the MQ-R go here. Currently none are needed for a first boot; the vendor
+# TPR1/2/3/6 words (0x02423190, 0x0008b061, 0xb4787896, 0x48) are left at the MQ-R defaults,
+# which are what mainline is known to boot with.
+
+# Make the console explicit, so a future base change cannot silently move it off UART3 (PB6/PB7).
+CONFIG_CONS_INDEX=4

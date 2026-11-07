@@ -1,0 +1,58 @@
+# Waveshare SK-18 (Allwinner T113-S3, 2x Cortex-A7, 512 MiB DDR3): mainline U-Boot + Linux.
+# Build:  make BR2_EXTERNAL=<repo>/br2-external O=<out> waveshare_sk18_defconfig && make O=<out>
+# See board/waveshare/sk18/README.md.
+
+# Architecture
+BR2_arm=y
+BR2_cortex_a7=y
+BR2_ARM_FPU_NEON_VFPV4=y
+
+# Reproducibility: every downloaded package must match a pinned hash
+BR2_DOWNLOAD_FORCE_CHECK_HASHES=y
+
+# Toolchain: Bootlin prebuilt (glibc, ARMv7 hard float), pinned by Buildroot
+BR2_TOOLCHAIN_EXTERNAL=y
+BR2_TOOLCHAIN_EXTERNAL_BOOTLIN=y
+BR2_TOOLCHAIN_EXTERNAL_BOOTLIN_ARMV7_EABIHF_GLIBC_STABLE=y
+
+# System
+BR2_TARGET_GENERIC_HOSTNAME="sk18"
+BR2_TARGET_GENERIC_ISSUE="Waveshare SK-18 (mainline Linux)"
+BR2_TARGET_GENERIC_ROOT_PASSWD=""
+BR2_TARGET_GENERIC_GETTY_PORT="ttyS3"
+BR2_TARGET_GENERIC_GETTY_BAUDRATE_115200=y
+BR2_ROOTFS_POST_BUILD_SCRIPT="$(BR2_EXTERNAL_SK18_PATH)/board/waveshare/sk18/post-build.sh"
+BR2_ROOTFS_POST_IMAGE_SCRIPT="support/scripts/genimage.sh"
+BR2_ROOTFS_POST_SCRIPT_ARGS="-c $(BINARIES_DIR)/genimage.cfg"
+
+# Kernel: newest mainline this Buildroot knows, sunxi defconfig plus our fragment, board DTS from this tree
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_VERSION=y
+BR2_LINUX_KERNEL_CUSTOM_VERSION_VALUE="7.3.1"
+BR2_LINUX_KERNEL_DEFCONFIG="sunxi"
+BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="$(BR2_EXTERNAL_SK18_PATH)/board/waveshare/sk18/linux.fragment"
+BR2_LINUX_KERNEL_DTS_SUPPORT=y
+BR2_LINUX_KERNEL_CUSTOM_DTS_PATH="$(BR2_EXTERNAL_SK18_PATH)/board/waveshare/sk18/sun8i-t113s-waveshare-sk18.dts"
+BR2_LINUX_KERNEL_INSTALL_TARGET=y
+BR2_LINUX_KERNEL_NEEDS_HOST_OPENSSL=y
+
+# Bootloader: mainline U-Boot with SPL (DRAM init from the vendor boot0 parameters, see uboot.fragment)
+BR2_TARGET_UBOOT=y
+BR2_TARGET_UBOOT_BUILD_SYSTEM_KCONFIG=y
+BR2_TARGET_UBOOT_CUSTOM_VERSION=y
+BR2_TARGET_UBOOT_CUSTOM_VERSION_VALUE="2026.10"
+BR2_TARGET_UBOOT_BOARD_DEFCONFIG="mangopi_mq_r"
+BR2_TARGET_UBOOT_CONFIG_FRAGMENT_FILES="$(BR2_EXTERNAL_SK18_PATH)/board/waveshare/sk18/uboot.fragment"
+BR2_TARGET_UBOOT_NEEDS_DTC=y
+BR2_TARGET_UBOOT_NEEDS_PYLIBFDT=y
+BR2_TARGET_UBOOT_NEEDS_OPENSSL=y
+BR2_TARGET_UBOOT_SPL=y
+BR2_TARGET_UBOOT_SPL_NAME="u-boot-sunxi-with-spl.bin"
+
+# Root file system
+BR2_TARGET_ROOTFS_EXT2=y
+BR2_TARGET_ROOTFS_EXT2_4=y
+# BR2_TARGET_ROOTFS_TAR is not set
+
+# Host tools
+BR2_PACKAGE_HOST_GENIMAGE=y

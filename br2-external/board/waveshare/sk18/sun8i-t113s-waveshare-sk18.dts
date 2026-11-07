@@ -1,0 +1,126 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/*
+ * Waveshare SK-18 (Allwinner T113-S3, 512 MiB DDR3, SD card boot).
+ *
+ * First bring-up version: console, SD card, USB (device port and host port). Display, touch,
+ * audio and the rest are added from evidence in later steps.
+ *
+ * Provenance of each statement:
+ *  - UART3 on PB6/PB7 as the console, SD card on mmc0 with card detect PF6 (active low), USB OTG
+ *    as peripheral, USB host 1 (ehci1/ohci1): all CONFIRMED by the original board DTB
+ *    (docs/phase2-image-analysis.md) and by the vendor boot0 (debug UART port 3).
+ *  - The fixed supply rails and the 4-bit SD bus are ASSUMED from the MangoPi MQ-R reference
+ *    design that shares the SoC package; the original DTB has no PMIC, only fixed 1.8 V / 3.3 V
+ *    rails. They must be checked against the schematic before any voltage is trusted.
+ */
+
+/dts-v1/;
+
+#include <dt-bindings/gpio/gpio.h>
+
+#include "sun8i-t113s.dtsi"
+
+/ {
+	model = "Waveshare SK-18";
+	compatible = "waveshare,sk18", "allwinner,sun8i-t113s";
+
+	aliases {
+		serial3 = &uart3;
+	};
+
+	chosen {
+		stdout-path = "serial3:115200n8";
+	};
+
+	/* ASSUMED: board wide 5 V from the USB-C socket */
+	reg_vcc5v: regulator-5v {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc-5v";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		regulator-always-on;
+	};
+
+	/* ASSUMED: 3.3 V rail */
+	reg_3v3: regulator-3v3 {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc-3v3";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		vin-supply = <&reg_vcc5v>;
+	};
+
+	/* ASSUMED: fixed core rail, as on the MQ-R (no PMIC to scale it) */
+	reg_vcc_core: regulator-core {
+		compatible = "regulator-fixed";
+		regulator-name = "vcc-core";
+		regulator-min-microvolt = <880000>;
+		regulator-max-microvolt = <880000>;
+		vin-supply = <&reg_vcc5v>;
+	};
+
+	/* ASSUMED: 2.8 V analog rail feeding bank E, as on the MQ-R */
+	reg_avdd2v8: regulator-avdd {
+		compatible = "regulator-fixed";
+		regulator-name = "avdd2v8";
+		regulator-min-microvolt = <2800000>;
+		regulator-max-microvolt = <2800000>;
+		vin-supply = <&reg_3v3>;
+	};
+};
+
+&cpu0 {
+	cpu-supply = <&reg_vcc_core>;
+};
+
+&cpu1 {
+	cpu-supply = <&reg_vcc_core>;
+};
+
+&dcxo {
+	clock-frequency = <24000000>;
+};
+
+/* USB host port (the Wi-Fi adapter). VBUS control is unknown: treated as always on. */
+&ehci1 {
+	status = "okay";
+};
+
+&mmc0 {
+	pinctrl-0 = <&mmc0_pins>;
+	pinctrl-names = "default";
+	vmmc-supply = <&reg_3v3>;
+	cd-gpios = <&pio 5 6 GPIO_ACTIVE_LOW>; /* PF6, CONFIRMED by the original DTB */
+	disable-wp;
+	bus-width = <4>;
+	status = "okay";
+};
+
+&ohci1 {
+	status = "okay";
+};
+
+&pio {
+	vcc-pb-supply = <&reg_3v3>;
+	vcc-pd-supply = <&reg_3v3>;
+	vcc-pe-supply = <&reg_avdd2v8>;
+	vcc-pf-supply = <&reg_3v3>;
+	vcc-pg-supply = <&reg_3v3>;
+};
+
+&uart3 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&uart3_pb_pins>;
+	status = "okay";
+};
+
+/* The USB-C socket goes to the host through an internal hub: the SK-18 is a USB peripheral. */
+&usb_otg {
+	dr_mode = "peripheral";
+	status = "okay";
+};
+
+&usbphy {
+	usb1_vbus-supply = <&reg_vcc5v>;
+	status = "okay";
+};

@@ -63,4 +63,4 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - **Changed on the DietPi machine (through the management API, config revisions 1 to 4):** added binding `sk18` (manufacturer `waveshare`, product `sk18`), resource set `sk18-keys` (grid 3x6), and an `opendeck` profile assignment of `sk18-keys` to `opendeck` (exclusive). `gatewayd` replaced by the `feature/deck-sk18` build; udev rule `70-control-deck-sk18.rules` and a systemd drop-in `DeviceAllow=char-ttyACM rw` added.
 - **Result:** `opendeck` holds all 18 keys and the device-level target; OpenDeck registered the device and set brightness 36.
 - **Rollback:** `POST /api/v1/config/rollback/<index>` (history from `GET /api/v1/config/history`); the old binary is `/usr/local/bin/gatewayd.prev-20261107-210540`; config copy in `/var/backups/control-deck-20261107-210540`.
-- **Not done:** the `work` profile does not assign the SK-18 (its keys have no holder while `work` is active).
+- **Update (config revision 5):** the `work` profile also assigns `sk18-keys` to `opendeck` (exclusive), so the SK-18 stays an OpenDeck deck in both profiles. Switching profiles was not exercised.

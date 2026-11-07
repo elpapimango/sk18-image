@@ -60,6 +60,12 @@ OpenWrt/Tina userland with procd, busybox ash, wpa_supplicant, dnsmasq, adbd, db
 
 **Inferred:** the stock device acts as a USB serial peripheral driven by the PC "upper computer" application (framed protocol in the vendor zip's `OpenSourceLicenseDemo`). It is not an OpenDeck network client, so Wi-Fi and OpenDeck are new functionality (see decision D-004).
 
+## Extra findings (Confirmed from strings and scripts)
+
+- `boot-resource/config.json` holds device settings: theme `/data/theme/SK18/defaultTheme.Theme`, backlight 71, name "ScreenKey", volume 7, `enableXIAOZHIAI`, `isCanvasFlip`.
+- `KeyboardDevice` references `/dev/ttyGS0` (USB gadget serial), `/dev/ttyS1`, `/dev/fb0`, `/dev/disp`, `/dev/g2d`, `/dev/ion`, and **`/dev/atsha204a`** (a Microchip ATSHA204A secure-element interface). Its JSON `method` handlers include `handleGetInfo`, `handleSetVolume`, `handlePlayAudio`, `handleStopAudio`, `handleSaveToFile`, `handleSetFileCRC`, `handleDeleteFiles` and `handleSetBacklight`. Commands include `SHOW_JPG`, `GET_DEVICE_SCREENMESSAGE` and `REQUEST_UPLOAD_KEY`.
+- The ATSHA204A is probably used for licensing or authentication. The replacement must not depend on it or try to bypass it.
+
 ## Board device tree (from the U-Boot package DTB, `model = "SK18"`)
 
 Decompiled with `dtc -I dtb -O dts` (about 127 warnings, mostly vendor-style nodes that are not standard bindings). Compatible: `allwinner,t113`, `allwinner,r528`, `arm,sun8iw20p1`.

@@ -46,3 +46,9 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - **Inferred:** a blank or factory-formatted test card; contents of the FAT partition were not inspected.
 - **Rule:** nothing is written to it until a flash is explicitly requested. Before any write, re-run `lsblk -o NAME,SIZE,MODEL,SERIAL,TRAN,RM,MOUNTPOINTS` and require serial `3063422494200319`, size 4026531840 bytes, transport usb and no mountpoints. The device name (`sda`) can change between plugs; the serial cannot.
 - **Rollback:** the card is replaceable; the original image and the extracted partitions stay untouched.
+
+## D-008 Wi-Fi adapter: confirmed mainline support and firmware
+- **Observed (2026-11-07, DietPi machine, Linux 6.18):** after `usb_modeswitch -v 0bda -p 1a2b -KR` the adapter re-enumerates as `0bda:b711` "802.11n WLAN Adapter" (Realtek). The mainline `rtl8xxxu` driver binds by itself: "RTL8710BU rev A (SMIC) romver 1, 1T1R", firmware `rtlwifi/rtl8710bufw_SMIC.bin` (revision 16.0) loads.
+- **Consequence:** no out-of-tree driver is needed. The final image needs `rtl8xxxu` (plus cfg80211/mac80211), the `linux-firmware` file `rtlwifi/rtl8710bufw_SMIC.bin`, and a mode switch at plug-in time (`usb_modeswitch` plus a udev rule for `0bda:1a2b`), because the adapter first appears as a CD-ROM.
+- **Unknown:** whether the T113 mainline kernel's USB host (EHCI/OHCI) works with this adapter; scan/association not tested yet.
+- **Changed on the DietPi machine:** installed the `usb-modeswitch` package (`apt`), switched the dongle once. Rollback: unplug/replug restores CD-ROM mode; `apt remove usb-modeswitch`.

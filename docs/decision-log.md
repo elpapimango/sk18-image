@@ -71,3 +71,10 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - **Build problems fixed on the way:** missing `BR2_TARGET_UBOOT_NEEDS_GNUTLS` (U-Boot host tool `mkeficapsule`), and the DTS include path (`allwinner/` subdirectory); line endings pinned with `.gitattributes`.
 - **Not yet known:** whether it boots. Failure before the kernel gives no output without the UART3 header.
 - **Reproduce:** `br2-external/board/waveshare/sk18/README.md`. **Roll back:** the original card.
+
+## D-012 Test card flashed with the first mainline image (2026-11-07)
+- **Changed:** `sdcard.img` (SHA-256 `9fdda5c6…7e0f9`, 63,963,136 bytes) written to the card with serial `3063422494200319` (found by serial, not by device name; 4,026,531,840 bytes, USB, removable, nothing mounted, not the system disk) with `dd bs=1M conv=fsync`. Read back and compared: identical hash. Only the first 61 MiB were written; the rest of the card keeps its old contents (a FAT remnant that nothing reads).
+- **Result on the card:** one ext4 partition, PARTUUID `0915bee9-7461-4b03-9e9d-3e6d87e23276`, equal to the one in `/boot/extlinux/extlinux.conf`.
+- **Not yet done:** boot the SK-18 from this card.
+- **What to expect and look for:** the screen stays dark (no display driver in this image; that is not a failure). The SK-18's USB hub and HID chip (`4250:426f`) still appear on the host. If the kernel boots, a new `g_serial` device (`0525:a4a7`, `/dev/ttyACM*`) appears with a login prompt; the stock `1d6b:0104` serial port does not appear.
+- **Roll back:** put the original or backup card back in the SK-18.

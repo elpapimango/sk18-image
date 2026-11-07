@@ -64,3 +64,10 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - **Result:** `opendeck` holds all 18 keys and the device-level target; OpenDeck registered the device and set brightness 36.
 - **Rollback:** `POST /api/v1/config/rollback/<index>` (history from `GET /api/v1/config/history`); the old binary is `/usr/local/bin/gatewayd.prev-20261107-210540`; config copy in `/var/backups/control-deck-20261107-210540`.
 - **Update (config revision 5):** the `work` profile also assigns `sk18-keys` to `opendeck` (exclusive), so the SK-18 stays an OpenDeck deck in both profiles. Switching profiles was not exercised.
+
+## D-011 First mainline image built (2026-11-07)
+- **Observed:** `waveshare_sk18_defconfig` in `br2-external/` builds to completion with Buildroot `60a3423e95`: U-Boot 2026.10 (SPL + U-Boot, 487 KB), Linux 7.3.1 (`zImage` 6.1 MB), the board DTB (18.6 KB) and a 60 MB ext4 root, combined in `sdcard.img` (64 MB, SHA-256 `9fdda5c611db6bae6927cbd5b9bddfe1d1a2cd56a3e876c2454e851954d7e0f9`).
+- **Checked in the image:** SPL header (`eGON.BT0`, `SPL` marker) at 8 KiB; uImage-wrapped U-Boot at 40 KiB; GPT with one partition at LBA 2048 whose GUID equals the `PARTUUID` in `/boot/extlinux/extlinux.conf`; `/boot` holds `zImage`, the DTB and `extlinux/`; `getty` on `ttyS3` and `ttyGS0`; `root` has an empty password (bring-up only).
+- **Build problems fixed on the way:** missing `BR2_TARGET_UBOOT_NEEDS_GNUTLS` (U-Boot host tool `mkeficapsule`), and the DTS include path (`allwinner/` subdirectory); line endings pinned with `.gitattributes`.
+- **Not yet known:** whether it boots. Failure before the kernel gives no output without the UART3 header.
+- **Reproduce:** `br2-external/board/waveshare/sk18/README.md`. **Roll back:** the original card.

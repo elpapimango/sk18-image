@@ -64,7 +64,21 @@ The host sends one JPEG of the whole `deviceWidth x deviceHeight` screen as the 
 device answers each frame with a cmd 100 frame (the demo treats this as "frame finished" and sends
 the next one), so the host paints at the device's pace.
 
-## Still to verify on the device
+## Verified with the `deck-sk18` driver on a real SK-18 (V2.31, 2026-11-07)
 
-Reply to a `SHOW_JPG` frame, the format and timing of `keyStateChanged`, `setBacklight` range, and
-whether touches or physical keys produce the key events.
+- A full-screen JPEG (720x1280, quality 85) is shown after the host sends it as a `SHOW_JPG` frame;
+  18 key colours painted correctly into the rectangles from `getInfo`.
+- The driver sent the next frame after the device's `SHOW_JPG` echo and never needed its 1.5 s
+  fallback timeout during the test.
+- `keyStateChanged` (`col`, `row`, `pressed`) is sent for **touches on the on-screen keys**: 48 events
+  for a press and a release on each key, in order, no duplicates, positions matching the touched keys.
+- `setBacklight` with `level` 70 was accepted without an error reply (the visible brightness change
+  was not measured).
+- Repainting a key white while pressed and back on release kept up with finger speed.
+
+## Still to verify
+
+Whether the device has physical buttons that produce events, the valid range and effect of
+`setBacklight`, behaviour when the host stops sending frames (does the stock UI come back, and
+when?), and how long a frame takes to reach the screen (latency).
+

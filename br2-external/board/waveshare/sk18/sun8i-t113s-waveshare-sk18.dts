@@ -18,7 +18,8 @@
 
 #include <dt-bindings/gpio/gpio.h>
 
-#include "sun8i-t113s.dtsi"
+/* Buildroot copies this file to arch/arm/boot/dts/; the Allwinner includes live in allwinner/. */
+#include "allwinner/sun8i-t113s.dtsi"
 
 / {
 	model = "Waveshare SK-18";

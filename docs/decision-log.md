@@ -40,3 +40,9 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - **Inferred:** the SK-18 needs a device-side connection to the gateway, i.e. the gateway treats it as a network-attached deck. `/ws/client` does not fit (it is the consumer side).
 - **Options:** (A) add a new "remote device" endpoint and `DeviceProvider` to `controldeck-rs` that the SK-18 client connects to; (B) as an interim step, write a `deck-sk18` driver that uses the stock firmware's USB serial protocol so the gateway side can be developed and tested before the Linux port is finished.
 - **Open:** user to choose between A, B or both.
+
+## D-007 Test SD card on the DietPi machine
+- **Observed (2026-11-07, read-only):** USB card reader "Generic MassStorageClass", serial `3063422494200319`, enumerated as `/dev/sda`: 7,864,320 sectors (4,026,531,840 bytes, the same size as the original image), removable, not mounted, MBR with one FAT32 partition (start sector 32, factory-style format). The DietPi machine boots from `/dev/mmcblk0` (115.5 GB), which is a different device.
+- **Inferred:** a blank or factory-formatted test card; contents of the FAT partition were not inspected.
+- **Rule:** nothing is written to it until a flash is explicitly requested. Before any write, re-run `lsblk -o NAME,SIZE,MODEL,SERIAL,TRAN,RM,MOUNTPOINTS` and require serial `3063422494200319`, size 4026531840 bytes, transport usb and no mountpoints. The device name (`sda`) can change between plugs; the serial cannot.
+- **Rollback:** the card is replaceable; the original image and the extracted partitions stay untouched.

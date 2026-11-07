@@ -13,7 +13,7 @@ Status labels: **Confirmed** (read from the image), **Inferred** (reasoned, not 
 | Zip SHA-256 | `1e9e43a58620b836cf532c31f5f3ab87c5a06490e1f9186b6544a6d6b747a29a` |
 | Working copies | WSL `~/sk18-work/parts/*.bin`, plus `dtb/` and `app/` (not committed, they derive from proprietary firmware) |
 
-The original image is only ever read. Partitions were copied with `dd bs=512 skip=<start> count=<sectors>` and checked against the source by re-hashing the same sector ranges (all OK except UDISK, verification pending at the time of writing).
+The original image is only ever read. Partitions were copied with `dd bs=512 skip=<start> count=<sectors>` and checked against the source by re-hashing the same sector ranges (all seven files verified identical to the source ranges).
 
 ## Partition table (Confirmed)
 
@@ -39,7 +39,9 @@ GPT with protective MBR, 512-byte sectors, first usable LBA 41464.
    - `bootdelay=0`
 4. The Android boot image (board name `t113-pro`) carries a gzip zImage (kernel at `0x40008000`) and a 12-byte ramdisk. Kernel: **Linux 5.4.61**, built by `arm-openwrt-linux-gnueabi-gcc` (Linaro 6.4.1), build #231, 2025-10-17.
 
-**Unknown:** whether the kernel in `boot` carries its own DTB or relies on the U-Boot-provided one; the exact kernel command line seen by Linux after U-Boot rewrites it.
+**Kernel DTB (Confirmed):** the `boot` image has no DTB (header `dt_size`/second size are 0, and a scan for valid FDT headers in the image and in the decompressed kernel finds none). The `sunxi-package` lists items `u-boot`, `optee` and `dtb`. The `dtb` item is the 53,881-byte `SK18` board DTB at byte 18,120,704, which U-Boot hands to the kernel. The 17,174-byte `sun8iw20` DTB at byte 17,823,248 is U-Boot's own control tree (9 enabled nodes versus 47 in the board DTB). So the board DTB is the single source of truth for hardware facts.
+
+**Unknown:** the exact kernel command line seen by Linux after U-Boot rewrites `bootargs` (the board DTB `chosen` node says `console=ttyS0`, the U-Boot environment overrides it).
 
 ## Root filesystem (Confirmed)
 
@@ -91,6 +93,6 @@ Decompiled with `dtc -I dtb -O dts` (about 127 warnings, mostly vendor-style nod
 ## Next steps
 
 1. Verify UDISK and the full-set hashes; analyse UDISK contents.
-2. Locate the kernel DTB (inside `boot` or provided by U-Boot) and compare it with the board DTB.
+2. (Done) Kernel DTB located: it is the `SK18` board DTB from the U-Boot package.
 3. Decide the boot-chain strategy (reuse vendor boot0/U-Boot with a mainline kernel first, or mainline SPL/U-Boot).
 4. Establish serial console access on a test card.

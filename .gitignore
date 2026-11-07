@@ -1,0 +1,20 @@
+# Original card image, vendor package and anything extracted from them
+/image/
+/extracted/
+/work/
+*.img
+*.bin
+*.dtb
+*.zip
+*.7z
+
+# Buildroot output
+/output/
+/dl/
+*.o
+*.log
+
+# Secrets
+*.pem
+*.key
+wpa_supplicant*.conf

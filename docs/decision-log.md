@@ -52,3 +52,15 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - **Consequence:** no out-of-tree driver is needed. The final image needs `rtl8xxxu` (plus cfg80211/mac80211), the `linux-firmware` file `rtlwifi/rtl8710bufw_SMIC.bin`, and a mode switch at plug-in time (`usb_modeswitch` plus a udev rule for `0bda:1a2b`), because the adapter first appears as a CD-ROM.
 - **Unknown:** whether the T113 mainline kernel's USB host (EHCI/OHCI) works with this adapter; scan/association not tested yet.
 - **Changed on the DietPi machine:** installed the `usb-modeswitch` package (`apt`), switched the dongle once. Rollback: unplug/replug restores CD-ROM mode; `apt remove usb-modeswitch`.
+
+## D-009 SK-18 orientation (2026-11-07)
+- **Observed:** the firmware reports a portrait grid of 3 columns x 6 rows. With three keys lit (firmware row/col: red (0,0), blue (5,0), green (0,2)) the user saw red top right, blue top left, green bottom right on the device as used, i.e. turned 90 degrees clockwise. Touches reported the same firmware numbering as the lit keys, so touch and display rotate together.
+- **Changed (control-deck-rs, branch `feature/deck-sk18`):** an `Orientation` setting in `deck-sk18` rotates the key grid, the key images and the touch events. The mapping is `logical row = firmware column`, `logical column = rows - 1 - firmware row`. `gatewayd` defaults to 90 degrees clockwise; `CONTROL_DECK_SK18_ORIENTATION` overrides it.
+- **Test:** the unit tests encode the three observations; the production gateway reports a 3x6 grid. Rollback: set `CONTROL_DECK_SK18_ORIENTATION=0`.
+
+## D-010 SK-18 in the production gateway for OpenDeck (2026-11-07)
+- **Observed:** `/etc/control-deck/config.toml` only knew the Stream Deck XL, so the OpenDeck plugin held no SK-18 keys.
+- **Changed on the DietPi machine (through the management API, config revisions 1 to 4):** added binding `sk18` (manufacturer `waveshare`, product `sk18`), resource set `sk18-keys` (grid 3x6), and an `opendeck` profile assignment of `sk18-keys` to `opendeck` (exclusive). `gatewayd` replaced by the `feature/deck-sk18` build; udev rule `70-control-deck-sk18.rules` and a systemd drop-in `DeviceAllow=char-ttyACM rw` added.
+- **Result:** `opendeck` holds all 18 keys and the device-level target; OpenDeck registered the device and set brightness 36.
+- **Rollback:** `POST /api/v1/config/rollback/<index>` (history from `GET /api/v1/config/history`); the old binary is `/usr/local/bin/gatewayd.prev-20261107-210540`; config copy in `/var/backups/control-deck-20261107-210540`.
+- **Not done:** the `work` profile does not assign the SK-18 (its keys have no holder while `work` is active).

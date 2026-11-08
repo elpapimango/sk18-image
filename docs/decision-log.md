@@ -86,3 +86,10 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - **Meaning:** mainline SPL DRAM init (parameters from the MQ-R base, equal to the original boot0 header), U-Boot, the kernel, the board DTS (UART3, mmc0, USB OTG as peripheral), the SD card and the USB gadget all work on this board. The UART3 header was not needed.
 - **Not working or not yet in the image:** display (screen stays dark), backlight, touch, Wi-Fi, audio, anything key-related. The stock serial protocol is gone while this card runs, so the gateway shows the SK-18 as detached.
 - **Tools used:** `serial_sh.py`-style login over `/dev/ttyACM0` from the DietPi machine (read-only commands). Rollback: put the original or backup card back.
+
+## D-014 Display image built and flashed (2026-11-07)
+- **Changed:** the image now has the display pipeline (DE2 mixer, TCON top, TCON LCD0, MIPI-DSI, D-PHY), a `panel-simple` entry for the SK-18 panel (`patches/linux/0001-drm-panel-simple-add-waveshare-sk18-panel.patch`, applies cleanly to Linux 7.3.1), a software-PWM backlight on PG10, and the text console on the screen (`console=tty0`, `fbcon=rotate:3`, font 10x18). See `docs/phase5-display.md`.
+- **Checked in the build:** kernel options on, patch present in the source, panel and six display nodes in the compiled DTB, new boot arguments in `extlinux.conf`.
+- **Flashed:** `sdcard.img` SHA-256 `28dbfba4e1fbf45fcb0f3052844baa16b1ce6dbe177d848144c9b29375ed3f8c` to the test card (serial `3063422494200319`, found by serial; checks passed), read back and identical. New PARTUUID `ba26212a-aed0-4795-b8a4-f010ac5120fb`.
+- **To look at on the board:** backlight on or off; any picture; whether the boot text is readable, and upside-down or sideways (`fbcon=rotate` value); whether it flickers (software PWM). The serial console on the DietPi machine shows the kernel DRM messages.
+- **If there is no picture:** DSI mode flags (burst instead of sync pulse), the role of PE5, the panel supply.

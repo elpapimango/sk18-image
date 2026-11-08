@@ -70,3 +70,17 @@ found nothing. The ports are wired in the dtsi (`tcon_lcd0_out_dsi` to `dsi_in_t
   turns the component callbacks into no-ops. Applies cleanly to 7.3.1.
 - **Next possible failures (not yet seen):** D-PHY or DSI register differences on this SoC, panel mode flags
   (sync pulse versus burst), PE5's role.
+
+## Second test on the board (2026-11-07): pipeline up, still no picture, DSI pads not muxed
+
+- **Observed with patch 0002:** the DSI probes and the DRM device appears (`card0`, `card0-DSI-1`, `fb0`); the connector is
+  `connected`/`enabled`/`dpms On` with mode 720x1280; the console framebuffer (XR24 720x1280) is on the CRTC;
+  `tcon-lcd0` runs at 840 MHz (70 MHz x 24 bit / 2 lanes), the pixel clock at 210 MHz (divider 4), the DSI mod clock at
+  150 MHz (the vendor DTB assigns the same 150 MHz); the panel enable GPIO (PE5) is high; the backlight is lit (50 %).
+  The screen stays black. Only warning: `panel-simple-dsi: Unbalanced pm_runtime_enable!`.
+- **Cause found in the sources:** the shared dtsi defines `dsi_4lane_pins` (PD0 to PD9, function `dsi`, drive strength 30)
+  but nothing references it, and my board file did not either. The pads stayed at their reset state.
+- **Change:** `pinctrl-0 = <&dsi_4lane_pins>` on `&dsi`. Compiled DTB checked. Not yet run on the board.
+- **Still open if it stays black:** the polarity of PE5 (the vendor DTB gives it flag 1, probably active low; I use
+  active high), DSI mode flags (burst or sync pulse), DSI init commands the stock kernel may send (the SDK's
+  `default_panel.c` has none, but the shipped kernel could differ).

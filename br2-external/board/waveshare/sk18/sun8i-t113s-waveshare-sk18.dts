@@ -127,6 +127,14 @@
 &dsi {
 	status = "okay";
 
+	/*
+	 * The D-PHY pads are PD0..PD9 in the "dsi" function (mux 4, drive strength 30), as in the
+	 * original DTB. The shared dtsi defines the group but no node uses it; without it the pads stay
+	 * at their reset state and no DSI signal leaves the chip.
+	 */
+	pinctrl-names = "default";
+	pinctrl-0 = <&dsi_4lane_pins>;
+
 	panel@0 {
 		compatible = "waveshare,sk18-panel";
 		reg = <0>;

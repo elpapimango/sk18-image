@@ -1,0 +1,11 @@
+config BR2_PACKAGE_SK18_LINK
+	bool "sk18-link"
+	depends on BR2_PACKAGE_HOST_RUSTC_TARGET_ARCH_SUPPORTS
+	select BR2_PACKAGE_HOST_RUSTC
+	help
+	  The SK-18 as a deck for controldeck: the device side of the deck
+	  protocol on the USB gadget's serial port. Shows the pictures the
+	  host sends on the panel and reports key presses from the UART1
+	  controller.
+
+	  Source: client/sk18-link in this repository.

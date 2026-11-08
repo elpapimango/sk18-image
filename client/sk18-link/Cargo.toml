@@ -1,0 +1,25 @@
+[package]
+name = "sk18-link"
+description = "Device side of the SK-18 deck protocol: the open-source firmware's link to controldeck over USB serial"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "sk18_link"
+
+[[bin]]
+name = "sk18-link"
+path = "src/main.rs"
+
+[dependencies]
+# Key events from the UART1 controller and the orientation maths.
+sk18-keys = { path = "../sk18-keys" }
+serde_json = "1"
+# Pure Rust JPEG decoder (the host sends one JPEG of the whole screen per update).
+zune-jpeg = "0.4"
+zune-core = "0.4"
+
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", default-features = false, features = ["std", "fs", "termios"] }

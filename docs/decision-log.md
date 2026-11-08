@@ -258,3 +258,9 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - **USB gadget:** composite via configfs, `1d6b:0104`, **no serial number** (the stock device had none; with one, the id would change from `waveshare-sk18` and the user's OpenDeck layout, keyed by id, would be lost again), two CDC-ACM functions: `acm.usb0` (host `ttyACM0`, device `ttyGS0`) carries the protocol, `acm.usb1` (host `ttyACM1`, device `ttyGS1`) is the login console, so development access survives. `console=ttyGS0` leaves the kernel command line (the port no longer exists at early boot).
 - **Host driver changes (control-deck-rs, branch `feature/deck-sk18`):** accept the new manufacturer string; treat the several ACM ports of one USB device as one device (today `discover` deduplicates by port path only, so the console port would appear as a second SK-18).
 - **Order:** (1) gadget and discovery, (2) `sk18-link` daemon, (3) end-to-end with the gateway and OpenDeck.
+
+## D-035 — sk18-link: device side of the stock deck protocol (2026-11-08)
+
+- Decision: a single Rust daemon (`client/sk18-link`) serves the stock USB-serial deck protocol on `/dev/ttyGS0`: cmd 100 JPEG goes to the framebuffer (zune-jpeg, XRGB8888), `getInfo`/`setBacklight` JSON are answered, UART1 key frames become `keyStateChanged` events. Started by `S90sk18-link` once the splash has finished.
+- Why: controldeck's `deck-sk18` driver then works unchanged (D-034). Unknown JSON methods get a nack.
+- Open: JPEG decode time on the Cortex-A7 is unmeasured (verbose log prints decode/write ms); end-to-end with gatewayd/OpenDeck still to be tested.

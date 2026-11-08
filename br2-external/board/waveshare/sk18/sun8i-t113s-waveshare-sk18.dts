@@ -186,6 +186,36 @@
 	vcc-pe-supply = <&reg_avdd2v8>;
 	vcc-pf-supply = <&reg_3v3>;
 	vcc-pg-supply = <&reg_3v3>;
+
+	/* I2C2 on PE12 (SCK) / PE13 (SDA), mux 2: CONFIRMED by the stock DTB and the stock register dump. */
+	i2c2_pe_pins: i2c2-pe-pins {
+		pins = "PE12", "PE13";
+		function = "i2c2";
+	};
+};
+
+/*
+ * Touch panel. CONFIRMED by the stock DTB: Goodix gt9xx on I2C bus 2, address 0x14, interrupt PB6 and
+ * reset ("wakeup") PB7. The same bus also carries an ATSHA204A at 0x64 (not used here). Chip variant and
+ * resolution are not known from the DTB (it lists 800x480, which is the vendor driver's scaling), so the
+ * driver reads them from the chip.
+ */
+&i2c2 {
+	pinctrl-names = "default";
+	pinctrl-0 = <&i2c2_pe_pins>;
+	clock-frequency = <100000>; /* as the stock DTB */
+	status = "okay";
+
+	touchscreen@14 {
+		compatible = "goodix,gt911";
+		reg = <0x14>;
+		interrupt-parent = <&pio>;
+		interrupts = <1 6 IRQ_TYPE_EDGE_FALLING>; /* PB6 */
+		irq-gpios = <&pio 1 6 GPIO_ACTIVE_HIGH>;
+		reset-gpios = <&pio 1 7 GPIO_ACTIVE_HIGH>; /* PB7 */
+		AVDD28-supply = <&reg_avdd2v8>;
+		VDDIO-supply = <&reg_3v3>;
+	};
 };
 
 &uart3 {

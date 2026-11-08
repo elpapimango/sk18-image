@@ -32,6 +32,10 @@ CONFIG_HIGH_RES_TIMERS=y
 CONFIG_BACKLIGHT_CLASS_DEVICE=y
 CONFIG_BACKLIGHT_PWM=y
 
+# Touch: Goodix on I2C2 (CONFIG_I2C_MV64XXX is already on for the Allwinner I2C block)
+CONFIG_TOUCHSCREEN_GOODIX=y
+CONFIG_INPUT_EVDEV=y
+
 # Text console on the screen (the panel is portrait; fbcon=rotate on the command line turns it)
 CONFIG_VT=y
 CONFIG_VT_CONSOLE=y

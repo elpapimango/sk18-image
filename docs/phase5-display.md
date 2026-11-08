@@ -98,3 +98,18 @@ found nothing. The ports are wired in the dtsi (`tcon_lcd0_out_dsi` to `dsi_in_t
 - **Known upstream state:** linux-sunxi reports the same `Couldn't get the DSI mod clock` failure on T113-S3 (fixed here by patch 0002);
   a November 2025 patch series adds LVDS support to the D1s/T113 combo D-PHY. No confirmed working DSI panel on mainline T113 was found.
 - **Next:** dump the display registers on the working stock system and on mainline and diff them (`tools/regdump`, hook `stock-lunch.sh`).
+
+## Looking inside the stock firmware (2026-11-08)
+
+- **No `/dev/mem` on stock:** the shipped kernel is built with `# CONFIG_DEVMEM is not set` (read from its embedded config), so the first dump
+  (`tools/regdump` through `lunch.sh`) produced only "open /dev/mem: No such file or directory". The clock summary, pin mux and GPIO captures of that run did work.
+- **What those captures say:** `tcon-lcd0` 840 MHz, `mipi-dsi` 150 MHz, `de0` 300 MHz, all display bus gates on: the same as mainline.
+  PE5 (`lcd_gpio_0`) is **not claimed and not a GPIO** on stock, so the stock display never drives it; PD0 to PD9 are `UNCLAIMED` (the vendor driver
+  releases its pinctrl handle after muxing). `usb1-vbus` is PG12, output high (for the USB host port; not yet in the mainline DTS).
+- **Register dump through a module:** `tools/stock-regs/sk18_regs.c` is a read-only module that publishes the display registers as `/proc/sk18_regs`.
+  The stock kernel allows it (`CONFIG_MODULES=y`, no `MODVERSIONS`, no signing). Built with the SDK's own gcc 6.4.1 against the SDK tree (same
+  5.4.61 and same relevant config), `vermagic=5.4.61 SMP preempt mod_unload ARMv7 p2v8` as the stock modules; all seven imported symbols exist in the stock kernel.
+  The GCC plugin of the SDK tree does not load into the vendor gcc, so the build disables it (`gccwrap.sh`).
+  Loaded by the stock-card hook `tools/stock-regs/stock-lunch.sh` (`lunch.sh` on the FAT partition, then `/mnt/SDCARD/regs_a.txt` and `regs_b.txt`).
+- **Safety:** the FAT partition of the stock card was backed up byte for byte first (`~/sk18-backups/stock-p1-before-20261108-123345.bin` on the DietPi machine);
+  only `lunch.sh` and the module were added, and they are removed again after the run.

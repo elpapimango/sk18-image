@@ -210,6 +210,29 @@
 };
 
 /*
+ * Touch: a four-wire RESISTIVE panel read by the SoC's own touch-panel ADC (TPADC). CONFIRMED by the stock
+ * DTB: node `rtp@2009c00`, compatible `allwinner,sun8i-ts`, enabled, sensitivity 15, filter type 1, and by the
+ * stock userspace (tslib with pthres/variance/dejitter/linear filters and a pointercal file). Its inputs are
+ * dedicated analog pins, so no GPIO or bus is involved. The driver is patches/linux/0003; mainline's
+ * clock controller already provides the TPADC clocks and reset. The node is added here because the shared
+ * dtsi has none.
+ */
+/ {
+	soc {
+		touchscreen@2009c00 {
+			compatible = "allwinner,sun20i-d1-ts";
+			reg = <0x2009c00 0x400>;
+			interrupts = <SOC_PERIPHERAL_IRQ(62) IRQ_TYPE_LEVEL_HIGH>;
+			clocks = <&ccu CLK_BUS_TPADC>, <&ccu CLK_TPADC>;
+			clock-names = "bus", "mod";
+			resets = <&ccu RST_BUS_TPADC>;
+			allwinner,tp-sensitive-adjust = <15>;
+			allwinner,filter-type = <1>;
+		};
+	};
+};
+
+/*
  * I2C2 carries an ATSHA204A crypto chip at 0x64 (CONFIRMED by a bus scan on mainline). There is NO Goodix
  * touch controller on it: the stock DTB has a `ctp@14` Goodix node, but it and its parent are
  * status = "disabled", PB6/PB7 (its INT/reset in that node) are the UART3 console pins, a scan of the bus

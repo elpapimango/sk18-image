@@ -1,0 +1,337 @@
+From: SK-18 project <noreply@example.invalid>
+Subject: [PATCH] Input: touchscreen: Add Allwinner D1/T113 resistive touchscreen driver
+
+Add a driver for the touch-panel ADC (TPADC) of the Allwinner D1 and T113
+SoCs, with its devicetree binding. The SK-18's screen is a four-wire
+resistive panel read by this block (it has no I2C, USB or GPIO signals). The
+register programming follows Allwinner's GPL vendor driver, which derives from
+sun4i-ts.c; mainline's sun4i-ts supports only the older A10/A13/A31 variants.
+
+---
+--- a/drivers/input/touchscreen/Kconfig
++++ b/drivers/input/touchscreen/Kconfig
+@@ -1274,6 +1274,17 @@
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called sun4i-ts.
+ 
++config TOUCHSCREEN_SUN20I_D1
++	tristate "Allwinner D1 / T113 resistive touchscreen controller"
++	depends on ARCH_SUNXI || COMPILE_TEST
++	depends on HAS_IOMEM && OF
++	help
++	  Say Y here to support the resistive touchscreen controller (TPADC)
++	  of the Allwinner D1 and T113 SoCs. Single touch only.
++
++	  To compile this driver as a module, choose M here: the module will
++	  be called sun20i-d1-ts.
++
+ config TOUCHSCREEN_SUR40
+ 	tristate "Samsung SUR40 (Surface 2.0/PixelSense) touchscreen"
+ 	depends on USB && MEDIA_USB_SUPPORT && HAS_DMA
+--- a/drivers/input/touchscreen/Makefile
++++ b/drivers/input/touchscreen/Makefile
+@@ -84,6 +84,7 @@
+ obj-$(CONFIG_TOUCHSCREEN_STMFTS)	+= stmfts.o
+ obj-$(CONFIG_TOUCHSCREEN_STMPE)		+= stmpe-ts.o
+ obj-$(CONFIG_TOUCHSCREEN_SUN4I)		+= sun4i-ts.o
++obj-$(CONFIG_TOUCHSCREEN_SUN20I_D1)	+= sun20i-d1-ts.o
+ obj-$(CONFIG_TOUCHSCREEN_SUR40)		+= sur40.o
+ obj-$(CONFIG_TOUCHSCREEN_SURFACE3_SPI)	+= surface3_spi.o
+ obj-$(CONFIG_TOUCHSCREEN_TI_AM335X_TSC)	+= ti_am335x_tsc.o
+--- /dev/null
++++ b/drivers/input/touchscreen/sun20i-d1-ts.c
+@@ -0,0 +1,210 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++/*
++ * Allwinner D1 / T113 resistive touchscreen controller (TPADC)
++ *
++ * The register programming follows Allwinner's vendor driver (sunxi-ts.c,
++ * GPL-2.0-or-later), which is itself derived from sun4i-ts.c by Hans de Goede.
++ * Single touch only: with a second touch the reported position is useless.
++ */
++
++#include <linux/bits.h>
++#include <linux/clk.h>
++#include <linux/input.h>
++#include <linux/input/touchscreen.h>
++#include <linux/interrupt.h>
++#include <linux/io.h>
++#include <linux/module.h>
++#include <linux/of.h>
++#include <linux/platform_device.h>
++#include <linux/reset.h>
++
++#define TP_CTRL0		0x00
++#define TP_CTRL1		0x04
++#define TP_CTRL2		0x08
++#define TP_CTRL3		0x0c
++#define TP_INT_FIFOC		0x10
++#define TP_INT_FIFOS		0x14
++#define TP_DATA			0x24
++
++#define CTRL0_ADC_FIRST_DLY(x)		((x) << 24)
++#define CTRL0_ADC_FIRST_DLY_MODE	BIT(23)
++#define CTRL0_ADC_CLK_DIV(x)		((x) << 20)
++#define CTRL0_FS_DIV(x)			((x) << 16)
++#define CTRL0_T_ACQ(x)			((x) << 0)
++
++#define CTRL1_STYLUS_UP_DEBOUN(x)	((x) << 12)
++#define CTRL1_STYLUS_UP_DEBOUN_EN	BIT(9)
++#define CTRL1_CHOPPER_EN		BIT(8)
++#define CTRL1_TP_MODE_EN		BIT(5)
++
++#define CTRL2_SENSITIVE_ADJUST(x)	((x) << 28)
++#define CTRL2_PRE_MEA_THRE_CNT(x)	((x) << 0)
++
++#define CTRL3_FILTER_EN			BIT(2)
++#define CTRL3_FILTER_TYPE(x)		((x) << 0)
++
++#define FIFOC_TEMP_IRQ_EN		BIT(18)
++#define FIFOC_OVERRUN_IRQ_EN		BIT(17)
++#define FIFOC_DATA_IRQ_EN		BIT(16)
++#define FIFOC_FIFO_TRIG(x)		((x) << 8)
++#define FIFOC_DATA_DRQ_EN		BIT(7)
++#define FIFOC_FIFO_FLUSH		BIT(4)
++#define FIFOC_UP_IRQ_EN			BIT(1)
++#define FIFOC_DOWN_IRQ_EN		BIT(0)
++
++#define FIFOS_DATA_PENDING		BIT(16)
++#define FIFOS_UP_PENDING		BIT(1)
++
++struct sun20i_ts {
++	struct input_dev *input;
++	void __iomem *base;
++	struct touchscreen_properties prop;
++	bool skip_next;		/* the first sample after a pen-up is unreliable */
++};
++
++static irqreturn_t sun20i_ts_irq(int irq, void *dev_id)
++{
++	struct sun20i_ts *ts = dev_id;
++	u32 status = readl(ts->base + TP_INT_FIFOS);
++
++	if (status & FIFOS_DATA_PENDING) {
++		/* always drain the sample, report it unless it is the unreliable first one */
++		u32 x = readl(ts->base + TP_DATA);
++		u32 y = readl(ts->base + TP_DATA);
++
++		if (ts->skip_next) {
++			ts->skip_next = false;
++		} else {
++			touchscreen_report_pos(ts->input, &ts->prop, x, y, false);
++			input_report_key(ts->input, BTN_TOUCH, 1);
++			input_sync(ts->input);
++		}
++	}
++
++	if (status & FIFOS_UP_PENDING) {
++		ts->skip_next = true;
++		input_report_key(ts->input, BTN_TOUCH, 0);
++		input_sync(ts->input);
++	}
++
++	/* the status bits are write-one-to-clear */
++	writel(status, ts->base + TP_INT_FIFOS);
++
++	return IRQ_HANDLED;
++}
++
++static int sun20i_ts_open(struct input_dev *input)
++{
++	struct sun20i_ts *ts = input_get_drvdata(input);
++
++	ts->skip_next = true;
++	writel(FIFOC_TEMP_IRQ_EN | FIFOC_OVERRUN_IRQ_EN | FIFOC_DATA_IRQ_EN |
++	       FIFOC_FIFO_TRIG(1) | FIFOC_DATA_DRQ_EN | FIFOC_FIFO_FLUSH |
++	       FIFOC_UP_IRQ_EN | FIFOC_DOWN_IRQ_EN, ts->base + TP_INT_FIFOC);
++
++	return 0;
++}
++
++static void sun20i_ts_close(struct input_dev *input)
++{
++	struct sun20i_ts *ts = input_get_drvdata(input);
++
++	writel(0, ts->base + TP_INT_FIFOC);
++}
++
++static void sun20i_ts_hw_init(struct sun20i_ts *ts, u32 sensitivity, u32 filter)
++{
++	writel(CTRL0_ADC_FIRST_DLY(1) | CTRL0_ADC_FIRST_DLY_MODE |
++	       CTRL0_ADC_CLK_DIV(2) | CTRL0_FS_DIV(2) | CTRL0_T_ACQ(5),
++	       ts->base + TP_CTRL0);
++
++	/* TP mode 0: X and Y only, no dual touch */
++	writel(CTRL2_SENSITIVE_ADJUST(sensitivity) | CTRL2_PRE_MEA_THRE_CNT(0xfff),
++	       ts->base + TP_CTRL2);
++
++	writel(CTRL3_FILTER_EN | CTRL3_FILTER_TYPE(filter), ts->base + TP_CTRL3);
++
++	/* stylus-up debounce of about 10 ms, then enable the touch-panel mode */
++	writel(CTRL1_STYLUS_UP_DEBOUN(5) | CTRL1_STYLUS_UP_DEBOUN_EN |
++	       CTRL1_CHOPPER_EN | CTRL1_TP_MODE_EN, ts->base + TP_CTRL1);
++}
++
++static int sun20i_ts_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct sun20i_ts *ts;
++	struct clk *clk;
++	struct reset_control *rst;
++	u32 sensitivity = 15, filter = 1;
++	int irq, ret;
++
++	ts = devm_kzalloc(dev, sizeof(*ts), GFP_KERNEL);
++	if (!ts)
++		return -ENOMEM;
++
++	ts->base = devm_platform_ioremap_resource(pdev, 0);
++	if (IS_ERR(ts->base))
++		return PTR_ERR(ts->base);
++
++	irq = platform_get_irq(pdev, 0);
++	if (irq < 0)
++		return irq;
++
++	rst = devm_reset_control_get_exclusive_deasserted(dev, NULL);
++	if (IS_ERR(rst))
++		return dev_err_probe(dev, PTR_ERR(rst), "cannot get the reset\n");
++
++	clk = devm_clk_get_enabled(dev, "bus");
++	if (IS_ERR(clk))
++		return dev_err_probe(dev, PTR_ERR(clk), "cannot get the bus clock\n");
++
++	clk = devm_clk_get_enabled(dev, "mod");
++	if (IS_ERR(clk))
++		return dev_err_probe(dev, PTR_ERR(clk), "cannot get the module clock\n");
++
++	of_property_read_u32(dev->of_node, "allwinner,tp-sensitive-adjust", &sensitivity);
++	of_property_read_u32(dev->of_node, "allwinner,filter-type", &filter);
++	if (sensitivity > 15 || filter > 3)
++		return dev_err_probe(dev, -EINVAL, "sensitivity or filter type out of range\n");
++
++	ts->input = devm_input_allocate_device(dev);
++	if (!ts->input)
++		return -ENOMEM;
++
++	ts->input->name = "sun20i-d1-ts";
++	ts->input->phys = "sun20i-d1-ts/input0";
++	ts->input->id.bustype = BUS_HOST;
++	ts->input->open = sun20i_ts_open;
++	ts->input->close = sun20i_ts_close;
++	input_set_capability(ts->input, EV_KEY, BTN_TOUCH);
++	input_set_abs_params(ts->input, ABS_X, 0, 4095, 0, 0);
++	input_set_abs_params(ts->input, ABS_Y, 0, 4095, 0, 0);
++	touchscreen_parse_properties(ts->input, false, &ts->prop);
++	input_set_drvdata(ts->input, ts);
++
++	sun20i_ts_hw_init(ts, sensitivity, filter);
++
++	ret = devm_request_irq(dev, irq, sun20i_ts_irq, 0, "sun20i-d1-ts", ts);
++	if (ret)
++		return dev_err_probe(dev, ret, "cannot request the interrupt\n");
++
++	return input_register_device(ts->input);
++}
++
++static const struct of_device_id sun20i_ts_of_match[] = {
++	{ .compatible = "allwinner,sun20i-d1-ts" },
++	{ /* sentinel */ }
++};
++MODULE_DEVICE_TABLE(of, sun20i_ts_of_match);
++
++static struct platform_driver sun20i_ts_driver = {
++	.driver = {
++		.name = "sun20i-d1-ts",
++		.of_match_table = sun20i_ts_of_match,
++	},
++	.probe = sun20i_ts_probe,
++};
++module_platform_driver(sun20i_ts_driver);
++
++MODULE_DESCRIPTION("Allwinner D1 / T113 resistive touchscreen controller driver");
++MODULE_LICENSE("GPL");
+--- /dev/null
++++ b/Documentation/devicetree/bindings/input/touchscreen/allwinner,sun20i-d1-ts.yaml
+@@ -0,0 +1,81 @@
++# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
++%YAML 1.2
++---
++$id: http://devicetree.org/schemas/input/touchscreen/allwinner,sun20i-d1-ts.yaml#
++$schema: http://devicetree.org/meta-schemas/core.yaml#
++
++title: Allwinner D1 / T113 resistive touchscreen controller
++
++maintainers:
++  - SK-18 project <noreply@example.invalid>
++
++description:
++  The touch-panel ADC (TPADC) of the Allwinner D1 and T113 SoCs. It measures a
++  four-wire resistive touch panel on dedicated analog pins; no GPIO is needed.
++
++allOf:
++  - $ref: touchscreen.yaml#
++
++properties:
++  compatible:
++    const: allwinner,sun20i-d1-ts
++
++  reg:
++    maxItems: 1
++
++  interrupts:
++    maxItems: 1
++
++  clocks:
++    items:
++      - description: Bus clock
++      - description: Module clock
++
++  clock-names:
++    items:
++      - const: bus
++      - const: mod
++
++  resets:
++    maxItems: 1
++
++  allwinner,tp-sensitive-adjust:
++    $ref: /schemas/types.yaml#/definitions/uint32
++    minimum: 0
++    maximum: 15
++    default: 15
++    description: Touch sensitivity, 0 is the least and 15 the most sensitive.
++
++  allwinner,filter-type:
++    $ref: /schemas/types.yaml#/definitions/uint32
++    minimum: 0
++    maximum: 3
++    default: 1
++    description:
++      Median/averaging filter sizes, 0 for 4/2, 1 for 5/3, 2 for 8/4, 3 for 16/8.
++
++required:
++  - compatible
++  - reg
++  - interrupts
++  - clocks
++  - clock-names
++  - resets
++
++unevaluatedProperties: false
++
++examples:
++  - |
++    #include <dt-bindings/interrupt-controller/arm-gic.h>
++    #include <dt-bindings/clock/sun20i-d1-ccu.h>
++    #include <dt-bindings/reset/sun20i-d1-ccu.h>
++
++    touchscreen@2009c00 {
++        compatible = "allwinner,sun20i-d1-ts";
++        reg = <0x2009c00 0x400>;
++        interrupts = <GIC_SPI 62 IRQ_TYPE_LEVEL_HIGH>;
++        clocks = <&ccu CLK_BUS_TPADC>, <&ccu CLK_TPADC>;
++        clock-names = "bus", "mod";
++        resets = <&ccu RST_BUS_TPADC>;
++        allwinner,tp-sensitive-adjust = <15>;
++    };

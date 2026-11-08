@@ -264,3 +264,10 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - Decision: a single Rust daemon (`client/sk18-link`) serves the stock USB-serial deck protocol on `/dev/ttyGS0`: cmd 100 JPEG goes to the framebuffer (zune-jpeg, XRGB8888), `getInfo`/`setBacklight` JSON are answered, UART1 key frames become `keyStateChanged` events. Started by `S90sk18-link` once the splash has finished.
 - Why: controldeck's `deck-sk18` driver then works unchanged (D-034). Unknown JSON methods get a nack.
 - Open: JPEG decode time on the Cortex-A7 is unmeasured (verbose log prints decode/write ms); end-to-end with gatewayd/OpenDeck still to be tested.
+
+## D-036 — Key windows measured from photographs; layout and splash use them (2026-11-08)
+
+- Evidence: a ruler pattern (per-key crosshair and ±90 px rulers, native coordinates) was shown on the panel and photographed close up. The glass window of a key is centred about +12 px along native x and +3 px along native y from the centre of the stock layout's 158 px square (x = 63 + 218·col, y = 10 + 218·row), and is about 170 px wide. In the photos native +x runs toward the photo's left and native +y toward its top (the unit was photographed with the cable on the right).
+- Decision: `sk18-keys::layout` holds the measured geometry (origin 75, 13; pitch 218; square 158; window 170). `getInfo` reports it, so the host draws each key where its window is; the splash fills each key's area around the same centres and sizes its letters to the 170 px window (they had overflowed the old cells).
+- Also measured: decode of a 720x1280 JPEG on the Cortex-A7 is 97 ms for the gateway's frames (59 KB) and 140 ms for a busy 330–430 KB picture; framebuffer write 3 ms. No ack problem once connected.
+- Open: verify visually; the ±2 px accuracy of the +12/+3 is read from photos.

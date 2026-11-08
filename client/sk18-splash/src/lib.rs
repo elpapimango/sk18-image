@@ -12,7 +12,7 @@
 //! 1600 .. 2000  the letters fade to black
 //! ```
 
-use sk18_keys::Orientation;
+use sk18_keys::{layout, Orientation};
 
 /// Total length of the animation.
 pub const TOTAL_MS: u32 = 2000;
@@ -115,6 +115,16 @@ pub fn to_native(orientation: Orientation, nw: usize, nh: usize, x: usize, y: us
     }
 }
 
+/// The inverse of [`to_native`]: the logical point shown at native `(x, y)`.
+pub fn to_logical_point(orientation: Orientation, nw: usize, nh: usize, x: usize, y: usize) -> (usize, usize) {
+    match orientation {
+        Orientation::Portrait => (x, y),
+        Orientation::Cw90 => (nh - 1 - y, x),
+        Orientation::Cw180 => (nw - 1 - x, nh - 1 - y),
+        Orientation::Cw270 => (y, nw - 1 - x),
+    }
+}
+
 impl Surface<'_> {
     fn fill_logical(&mut self, o: Orientation, x0: usize, y0: usize, x1: usize, y1: usize, c: Rgb) {
         if x1 <= x0 || y1 <= y0 {
@@ -165,15 +175,32 @@ pub fn render(s: &mut Surface<'_>, o: Orientation, t: u32) {
 
     for r in 0..rows {
         for c in 0..cols {
-            let (x0, x1) = (c * lw / cols, (c + 1) * lw / cols);
-            let (y0, y1) = (r * lh / rows, (r + 1) * lh / rows);
+            // The key window this cell of the picture belongs to (found through the uniform tiling, so any
+            // orientation works), and its measured place on the panel.
+            let (ux, uy) = ((c * 2 + 1) * lw / (cols * 2), (r * 2 + 1) * lh / (rows * 2));
+            let (nx, ny) = to_native(o, s.width, s.height, ux, uy);
+            let (kc, kr) = ((nx * layout::COLS / s.width).min(layout::COLS - 1), (ny * layout::ROWS / s.height).min(layout::ROWS - 1));
+            let (kcx, kcy) = layout::key_centre(kc, kr);
+            // The colour fills the space up to the middle between neighbouring keys (and to the screen's edge).
+            let span = |centre: usize, k: usize, count: usize, size: usize| {
+                let lo = if k == 0 { 0 } else { centre - layout::PITCH / 2 };
+                let hi = if k + 1 == count { size } else { centre + layout::PITCH / 2 };
+                (lo, hi)
+            };
+            let (nx0, nx1) = span(kcx, kc, layout::COLS, s.width);
+            let (ny0, ny1) = span(kcy, kr, layout::ROWS, s.height);
+            let (ax, ay) = to_logical_point(o, s.width, s.height, nx0, ny0);
+            let (bx, by) = to_logical_point(o, s.width, s.height, nx1 - 1, ny1 - 1);
+            let (x0, x1) = (ax.min(bx), ax.max(bx) + 1);
+            let (y0, y1) = (ay.min(by), ay.max(by) + 1);
             let bg = lerp([0, 0, 0], key_colour(r * cols + c, rows * cols), bg_level);
             s.fill_logical(o, x0, y0, x1, y1, bg);
 
             if let Some(letter) = letter_at(rows, cols, r, c).filter(|_| letter_level > 0.0) {
                 let ink = lerp(bg, [255, 255, 255], letter_level);
-                let block = block_size(x1 - x0, y1 - y0);
-                let (gx, gy) = (x0 + ((x1 - x0) - GLYPH_W * block) / 2, y0 + ((y1 - y0) - GLYPH_H * block) / 2);
+                let block = block_size(layout::WINDOW, layout::WINDOW);
+                let (cx, cy) = to_logical_point(o, s.width, s.height, kcx, kcy);
+                let (gx, gy) = (cx.saturating_sub(GLYPH_W * block / 2), cy.saturating_sub(GLYPH_H * block / 2));
                 for (gr, line) in glyph(letter).iter().enumerate() {
                     for (gc, ch) in line.bytes().enumerate() {
                         if ch == b'#' {
@@ -217,6 +244,15 @@ mod tests {
         assert!(x < lw && y < lh);
         let (nx, ny) = to_native(o, W, H, x, y);
         px(data, nx, ny)
+    }
+
+    /// Top left of the glyph on the logical cell `(r, c)` of the Cw90 grid, and its block size, worked out from the
+    /// measured key windows: logical row `r` is native column `r`, logical column `c` is native row `5 - c`.
+    fn glyph_origin(o: Orientation, r: usize, c: usize) -> (usize, usize, usize) {
+        let (cx, cy) = layout::key_centre(r, layout::ROWS - 1 - c);
+        let (lx, ly) = to_logical_point(o, W, H, cx, cy);
+        let block = block_size(layout::WINDOW, layout::WINDOW);
+        (lx - 5 * block / 2, ly - 7 * block / 2, block)
     }
 
     #[test]
@@ -329,14 +365,8 @@ mod tests {
         // Read the letters back from the logical canvas and compare with the bitmaps.
         let o = Orientation::Cw90;
         let d = frame(o, 1300);
-        let (lw, lh) = logical_size(o, W, H);
-        let (cols, rows) = (6usize, 3usize);
         for (i, ch) in b"SK18".iter().enumerate() {
-            let c = 1 + i;
-            let (x0, x1) = (c * lw / cols, (c + 1) * lw / cols);
-            let (y0, y1) = (lh / rows, 2 * lh / rows);
-            let block = block_size(x1 - x0, y1 - y0);
-            let (gx, gy) = (x0 + ((x1 - x0) - 5 * block) / 2, y0 + ((y1 - y0) - 7 * block) / 2);
+            let (gx, gy, block) = glyph_origin(o, 1, 1 + i);
             for (gr, line) in glyph(*ch).iter().enumerate() {
                 for (gc, b) in line.bytes().enumerate() {
                     let centre = at(&d, o, gx + gc * block + block / 2, gy + gr * block + block / 2);
@@ -355,10 +385,7 @@ mod tests {
         let want = lerp([0, 0, 0], key_colour(0, 18), 0.5);
         assert_eq!(at(&d, o, 10, 10), want);
         // the letter blocks are half way between the (dimmed) key colour and white
-        let (lw, lh) = logical_size(o, W, H);
-        let (x0, x1, y0, y1) = (lw / 6, 2 * lw / 6, lh / 3, 2 * lh / 3);
-        let block = block_size(x1 - x0, y1 - y0);
-        let (gx, gy) = (x0 + ((x1 - x0) - 5 * block) / 2, y0 + ((y1 - y0) - 7 * block) / 2);
+        let (gx, gy, block) = glyph_origin(o, 1, 1);
         // 'S' row 0, column 1 is a solid block
         let got = at(&d, o, gx + block + block / 2, gy + block / 2);
         let bg = lerp([0, 0, 0], key_colour(6 + 1, 18), 0.5);

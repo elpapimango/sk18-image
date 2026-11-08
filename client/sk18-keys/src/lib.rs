@@ -6,6 +6,7 @@
 //! serial port ([`port`]). See `docs/uart1-key-protocol.md` for the protocol and how it was found.
 
 pub mod frame;
+pub mod layout;
 pub mod orient;
 #[cfg(unix)]
 pub mod port;

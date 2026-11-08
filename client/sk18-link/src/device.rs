@@ -48,9 +48,10 @@ pub fn info() -> Value {
     let mut rects = Vec::new();
     for row in 0..ROWS {
         for col in 0..COLS {
+            let (x, y) = sk18_keys::layout::key_origin(col as usize, row as usize);
             rects.push(json!({
                 "col": col, "row": row, "isKey": true,
-                "x": 63 + 218 * col, "y": 10 + 218 * row, "width": 158, "height": 158
+                "x": x, "y": y, "width": sk18_keys::layout::KEY_SIZE, "height": sk18_keys::layout::KEY_SIZE
             }));
         }
     }
@@ -192,9 +193,9 @@ mod tests {
         let rects = panel["rects"].as_array().unwrap();
         assert_eq!(rects.len(), 18);
         // the first, a middle and the last key rectangle (158 px squares, pitch 218 px)
-        assert_eq!(rects[0], json!({"col":0,"row":0,"isKey":true,"x":63,"y":10,"width":158,"height":158}));
-        assert_eq!(rects[7], json!({"col":1,"row":2,"isKey":true,"x":281,"y":446,"width":158,"height":158}));
-        assert_eq!(rects[17], json!({"col":2,"row":5,"isKey":true,"x":499,"y":1100,"width":158,"height":158}));
+        assert_eq!(rects[0], json!({"col":0,"row":0,"isKey":true,"x":75,"y":13,"width":158,"height":158}));
+        assert_eq!(rects[7], json!({"col":1,"row":2,"isKey":true,"x":293,"y":449,"width":158,"height":158}));
+        assert_eq!(rects[17], json!({"col":2,"row":5,"isKey":true,"x":511,"y":1103,"width":158,"height":158}));
     }
 
     #[test]

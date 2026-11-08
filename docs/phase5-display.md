@@ -84,3 +84,17 @@ found nothing. The ports are wired in the dtsi (`tcon_lcd0_out_dsi` to `dsi_in_t
 - **Still open if it stays black:** the polarity of PE5 (the vendor DTB gives it flag 1, probably active low; I use
   active high), DSI mode flags (burst or sync pulse), DSI init commands the stock kernel may send (the SDK's
   `default_panel.c` has none, but the shipped kernel could differ).
+
+## Third test on the board (2026-11-07): still black; what was ruled out
+
+- **DSI pad mux:** applied (`pinmux-pins` shows PD0 to PD9 as `function dsi`), still black.
+- **PE5 polarity:** PE5 (panel enable/reset, `lcd_gpio_0`) held low for 45 s at runtime through the PIO data register: no change.
+  Register map verified first (`PE_CFG0` = output, `PE_DAT` bit 5 = 1, at `0x020000C0`/`0x020000D0`).
+- **Panel start-up commands:** none. The shipped kernel's `default_lcd` open flow was disassembled (table at `0xc0d19544`, flow `0xc039938c`):
+  power-on, **panel init = `bx lr` (empty)**, TCON enable, backlight. The stock kernel sends the panel no DCS commands.
+- **Which vendor code applies:** `CONFIG_ARCH_SUN8IW20` builds `lowlevel_v2x` (not v3x, which I read first and which is wrong for this chip).
+  Its `dsi_dphy_open` (combo D-PHY with PLL) matches mainline's A100 variant value for value; the PLL arithmetic is identical
+  (840 MHz lane clock: N=140, P=3, M0=0). So the D-PHY analog and PLL setup is not the difference.
+- **Known upstream state:** linux-sunxi reports the same `Couldn't get the DSI mod clock` failure on T113-S3 (fixed here by patch 0002);
+  a November 2025 patch series adds LVDS support to the D1s/T113 combo D-PHY. No confirmed working DSI panel on mainline T113 was found.
+- **Next:** dump the display registers on the working stock system and on mainline and diff them (`tools/regdump`, hook `stock-lunch.sh`).

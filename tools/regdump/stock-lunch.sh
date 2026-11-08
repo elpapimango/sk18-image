@@ -42,7 +42,7 @@ sync
 	cat /sys/kernel/debug/clk/clk_summary > "$D/clk_summary_stock.txt" 2>&1
 	cat /sys/kernel/debug/pinctrl/*/pinmux-pins > "$D/pinmux_stock.txt" 2>&1
 	cat /sys/kernel/debug/gpio > "$D/gpio_stock.txt" 2>&1
-	ls /sys/class/disp /sys/class/graphics 2>&1 > "$D/disp_class_stock.txt"
+	ls /sys/class/disp /sys/class/graphics > "$D/disp_class_stock.txt" 2>&1
 	sync
 ) &
 exit 0

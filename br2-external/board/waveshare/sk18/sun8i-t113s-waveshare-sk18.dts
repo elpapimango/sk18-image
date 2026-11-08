@@ -79,6 +79,21 @@
 	};
 
 	/* ASSUMED: 2.8 V analog rail feeding bank E, as on the MQ-R */
+	/*
+	 * VBUS of the internal USB host port (ehci1/ohci1) on PG12. CONFIRMED by the stock system: the kernel
+	 * claims PG12 as "usb1-vbus", output, high (docs/hardware-status.md). Kept on, as stock does.
+	 */
+	reg_usb1_vbus: regulator-usb1-vbus {
+		compatible = "regulator-fixed";
+		regulator-name = "usb1-vbus";
+		regulator-min-microvolt = <5000000>;
+		regulator-max-microvolt = <5000000>;
+		vin-supply = <&reg_vcc5v>;
+		gpio = <&pio 6 12 GPIO_ACTIVE_HIGH>;
+		enable-active-high;
+		regulator-always-on;
+	};
+
 	/* Panel power switch on PE5; the pin is LOW while the panel is powered (see the panel node). */
 	reg_lcd: regulator-lcd {
 		compatible = "regulator-fixed";
@@ -195,27 +210,17 @@
 };
 
 /*
- * Touch panel. CONFIRMED by the stock DTB: Goodix gt9xx on I2C bus 2, address 0x14, interrupt PB6 and
- * reset ("wakeup") PB7. The same bus also carries an ATSHA204A at 0x64 (not used here). Chip variant and
- * resolution are not known from the DTB (it lists 800x480, which is the vendor driver's scaling), so the
- * driver reads them from the chip.
+ * I2C2 carries an ATSHA204A crypto chip at 0x64 (CONFIRMED by a bus scan on mainline). There is NO Goodix
+ * touch controller on it: the stock DTB has a `ctp@14` Goodix node, but it and its parent are
+ * status = "disabled", PB6/PB7 (its INT/reset in that node) are the UART3 console pins, a scan of the bus
+ * finds only 0x64, and the stock system has no touch GPIO configured. The touch controller is something
+ * else (see docs/decision-log.md D-021).
  */
 &i2c2 {
 	pinctrl-names = "default";
 	pinctrl-0 = <&i2c2_pe_pins>;
 	clock-frequency = <100000>; /* as the stock DTB */
 	status = "okay";
-
-	touchscreen@14 {
-		compatible = "goodix,gt911";
-		reg = <0x14>;
-		interrupt-parent = <&pio>;
-		interrupts = <1 6 IRQ_TYPE_EDGE_FALLING>; /* PB6 */
-		irq-gpios = <&pio 1 6 GPIO_ACTIVE_HIGH>;
-		reset-gpios = <&pio 1 7 GPIO_ACTIVE_HIGH>; /* PB7 */
-		AVDD28-supply = <&reg_avdd2v8>;
-		VDDIO-supply = <&reg_3v3>;
-	};
 };
 
 &uart3 {
@@ -231,6 +236,6 @@
 };
 
 &usbphy {
-	usb1_vbus-supply = <&reg_vcc5v>;
+	usb1_vbus-supply = <&reg_usb1_vbus>;
 	status = "okay";
 };

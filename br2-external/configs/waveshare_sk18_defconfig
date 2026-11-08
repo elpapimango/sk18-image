@@ -61,6 +61,7 @@ BR2_TARGET_ROOTFS_EXT2_4=y
 # Bring-up tools: touch events (evtest) and I2C bus scanning (i2cdetect)
 BR2_PACKAGE_EVTEST=y
 BR2_PACKAGE_I2C_TOOLS=y
+BR2_PACKAGE_USBUTILS=y
 
 # Host tools
 BR2_PACKAGE_HOST_GENIMAGE=y

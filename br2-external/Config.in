@@ -1,3 +1,4 @@
 menu "SK-18 packages"
 source "$BR2_EXTERNAL_SK18_PATH/package/sk18-keys/Config.in"
+source "$BR2_EXTERNAL_SK18_PATH/package/sk18-wifi-firmware/Config.in"
 endmenu

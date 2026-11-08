@@ -1,0 +1,3 @@
+# Bring the Wi-Fi interface up when it appears (the adapter shows up as a CD-ROM first and is switched by
+# usb_modeswitch's own rules). Done in a helper because udev must not wait for the DHCP lease.
+ACTION=="add", SUBSYSTEM=="net", KERNEL=="wlan[0-9]*", RUN+="/usr/sbin/sk18-wlan-up %k"

@@ -48,3 +48,19 @@ CONFIG_FONT_10x18=y
 CONFIG_EXT4_FS=y
 CONFIG_DEVTMPFS=y
 CONFIG_DEVTMPFS_MOUNT=y
+
+# Wi-Fi: RTL8188GU USB adapter (0bda:b711 after the mode switch) through the in-kernel rtl8xxxu driver. Built in:
+# the firmware is read from the root file system when the adapter appears, which is after the root is mounted.
+CONFIG_NETDEVICES=y
+CONFIG_WIRELESS=y
+CONFIG_CFG80211=y
+CONFIG_MAC80211=y
+CONFIG_WLAN=y
+CONFIG_WLAN_VENDOR_REALTEK=y
+CONFIG_RTL8XXXU=y
+CONFIG_RFKILL=y
+CONFIG_PACKET=y
+# udev (eudev) needs these (devtmpfs is enabled above)
+CONFIG_INOTIFY_USER=y
+CONFIG_SIGNALFD=y
+CONFIG_EPOLL=y

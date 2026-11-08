@@ -1,0 +1,4 @@
+# Hashes of the files at linux-firmware tag 20261019 (checked when they were chosen, 2026-11-08)
+sha256  5601323d5840f81aae228545ef6a7285afefcc0979c286a296e3ec731d67177d  rtl8710bufw_SMIC.bin
+sha256  ca3701b33c715136d818fd7fc95ef851c30f2fd9d5e265781094c7234fc7da01  rtl8710bufw_UMC.bin
+sha256  a61351665b4f264f6c631364f85b907d8f8f41f8b369533ef4021765f9f3b62e  LICENCE.rtlwifi_firmware.txt

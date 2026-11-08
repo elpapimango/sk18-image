@@ -1,0 +1,12 @@
+config BR2_PACKAGE_SK18_WIFI_FIRMWARE
+	bool "sk18-wifi-firmware"
+	help
+	  Firmware of the RTL8188GU (RTL8710BU) USB Wi-Fi adapter used with
+	  the Waveshare SK-18: rtlwifi/rtl8710bufw_SMIC.bin and
+	  rtl8710bufw_UMC.bin, which the rtl8xxxu driver loads.
+
+	  Only these two files and their licence are downloaded, from the
+	  same linux-firmware release as Buildroot's own linux-firmware
+	  package, not the whole firmware tree. The firmware is Realtek's
+	  and is redistributable in binary form under the licence installed
+	  with it (/usr/share/doc/sk18-wifi-firmware).

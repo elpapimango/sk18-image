@@ -1,0 +1,4 @@
+#!/bin/sh
+# Called by udev when a wlan interface appears: run ifup in the background and keep its output.
+[ -s /etc/wpa_supplicant.conf ] || { echo "sk18-wlan-up: no /etc/wpa_supplicant.conf, not starting $1" > "/run/ifup-$1.log"; exit 0; }
+( setsid /sbin/ifup "$1" > "/run/ifup-$1.log" 2>&1 ) &

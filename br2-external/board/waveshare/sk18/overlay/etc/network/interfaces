@@ -1,0 +1,9 @@
+# Interfaces of the SK-18. wlan0 is the Wi-Fi adapter (USB, RTL8188GU); it only exists once the adapter has been
+# switched out of its CD-ROM mode, so it is brought up by udev when it appears (etc/udev/rules.d/80-sk18-wifi.rules)
+# and not at boot. The credentials are NOT part of the image: /etc/wpa_supplicant.conf is written onto the card
+# by tools/flash/provision-wifi.sh. Without it, wlan0 stays down.
+auto lo
+iface lo inet loopback
+
+iface wlan0 inet dhcp
+	wpa-conf /etc/wpa_supplicant.conf

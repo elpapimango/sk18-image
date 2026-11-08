@@ -55,15 +55,41 @@ static int sk18_regs_show(struct seq_file *m, void *unused)
 	return 0;
 }
 
+/*
+ * /proc/sk18_tp: the control and status registers of the touch-panel ADC (TPADC, 0x02009c00): CTRL0-3,
+ * INT_FIFOC, INT_FIFOS, TPR, CDAT. The temperature (0x20) and data (0x24) registers are NOT read: reading
+ * the data FIFO would consume a sample the stock driver is waiting for.
+ */
+static int sk18_tp_show(struct seq_file *m, void *unused)
+{
+	void __iomem *map = ioremap(0x02009c00, 0x40);
+	unsigned long off;
+
+	if (!map) {
+		seq_puts(m, "cannot map\n");
+		return 0;
+	}
+	for (off = 0; off < 0x20; off += 4)
+		seq_printf(m, "%02lx=%08x ", off, readl_relaxed(map + off));
+	seq_puts(m, "\n");
+	iounmap(map);
+	return 0;
+}
+
 static int __init sk18_regs_init(void)
 {
 	if (!proc_create_single("sk18_regs", 0444, NULL, sk18_regs_show))
 		return -ENOMEM;
+	if (!proc_create_single("sk18_tp", 0444, NULL, sk18_tp_show)) {
+		remove_proc_entry("sk18_regs", NULL);
+		return -ENOMEM;
+	}
 	return 0;
 }
 
 static void __exit sk18_regs_exit(void)
 {
+	remove_proc_entry("sk18_tp", NULL);
 	remove_proc_entry("sk18_regs", NULL);
 }
 

@@ -32,10 +32,8 @@ CONFIG_HIGH_RES_TIMERS=y
 CONFIG_BACKLIGHT_CLASS_DEVICE=y
 CONFIG_BACKLIGHT_PWM=y
 
-# Touch: resistive panel on the SoC's touch-panel ADC (patches/linux/0003, see D-021)
+# Touch/keys most likely arrive over UART1 (see D-022); the 8250 driver for it is already on.
 CONFIG_INPUT_EVDEV=y
-CONFIG_INPUT_TOUCHSCREEN=y
-CONFIG_TOUCHSCREEN_SUN20I_D1=y
 
 # Text console on the screen (the panel is portrait; fbcon=rotate on the command line turns it)
 CONFIG_VT=y

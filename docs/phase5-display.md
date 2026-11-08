@@ -56,3 +56,17 @@ found nothing. The ports are wired in the dtsi (`tcon_lcd0_out_dsi` to `dsi_in_t
 - The role of PE5 (enable, reset or backlight enable).
 - DSI mode flags (sync pulse versus burst) and lane clock behaviour (continuous or not).
 - The power supply of the panel (assumed always on, 3.3 V rail).
+
+## First test on the board (2026-11-07): no picture, cause found
+
+- **Observed:** the kernel with the display configuration boots (USB serial gadget as before), the screen stays dark,
+  and `dmesg` shows `sun6i-mipi-dsi 5450000.dsi: Couldn't get the DSI mod clock` on every probe attempt;
+  `devices_deferred` lists only `5450000.dsi`; `/sys/class/drm` has no card. The backlight device exists.
+- **Cause (Confirmed in the 7.3.1 source):** on the D1/T113 the DSI "mod" clock is the clock gate provided by the
+  TCON top (`CLK_TCON_TOP_DSI`, dtsi). The DSI driver requests it in `probe()`. The TCON top (`sun8i_tcon_top.c`)
+  registers its clock gates in its component `bind()`, which runs only after the DRM master has all components,
+  including the DSI (registered at the end of its probe). A deadlock; no upstream board enables the D1/T113 DSI.
+- **Fix:** `patches/linux/0002-drm-sun4i-tcon-top-register-clocks-at-probe.patch` registers the clocks in `probe()` and
+  turns the component callbacks into no-ops. Applies cleanly to 7.3.1.
+- **Next possible failures (not yet seen):** D-PHY or DSI register differences on this SoC, panel mode flags
+  (sync pulse versus burst), PE5's role.

@@ -1,0 +1,332 @@
+From: SK-18 project <noreply@example.invalid>
+Subject: [PATCH] pwm: Add Allwinner D1/T113 PWM driver
+
+Add a driver for the PWM controller of the Allwinner D1 and T113 SoCs, with
+its devicetree binding. The SK-18's display backlight is driven by channel 3.
+The register layout and the programming sequence follow Allwinner's GPL vendor
+driver (single-channel mode only); mainline's pwm-sun4i covers only the older
+A10, A13, H3 and H6 layouts.
+
+---
+--- a/drivers/pwm/Kconfig
++++ b/drivers/pwm/Kconfig
+@@ -748,6 +748,18 @@
+ 	  To compile this driver as a module, choose M here: the module
+ 	  will be called pwm-sun4i.
+ 
++config PWM_SUN20I_D1
++	tristate "Allwinner D1 / T113 PWM support"
++	depends on ARCH_SUNXI || COMPILE_TEST
++	depends on HAS_IOMEM && COMMON_CLK
++	depends on RESET_CONTROLLER
++	help
++	  Generic PWM framework driver for the PWM controller of the
++	  Allwinner D1 and T113 SoCs (eight channels in four pairs).
++
++	  To compile this driver as a module, choose M here: the module
++	  will be called pwm-sun20i-d1.
++
+ config PWM_SUNPLUS
+ 	tristate "Sunplus PWM support"
+ 	depends on ARCH_SUNPLUS || COMPILE_TEST
+--- a/drivers/pwm/Makefile
++++ b/drivers/pwm/Makefile
+@@ -68,6 +68,7 @@
+ obj-$(CONFIG_PWM_STM32_LP)	+= pwm-stm32-lp.o
+ obj-$(CONFIG_PWM_STMPE)		+= pwm-stmpe.o
+ obj-$(CONFIG_PWM_SUN4I)		+= pwm-sun4i.o
++obj-$(CONFIG_PWM_SUN20I_D1)	+= pwm-sun20i-d1.o
+ obj-$(CONFIG_PWM_SUNPLUS)	+= pwm-sunplus.o
+ obj-$(CONFIG_PWM_TEGRA)		+= pwm-tegra.o
+ obj-$(CONFIG_PWM_TH1520)	+= pwm_th1520.o
+--- /dev/null
++++ b/drivers/pwm/pwm-sun20i-d1.c
+@@ -0,0 +1,220 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++/*
++ * Allwinner D1 / T113 PWM controller
++ *
++ * Eight channels in four pairs. Each pair shares a clock source and a power-of-two divider; each channel has an
++ * 8-bit prescaler and a 16-bit period and duty counter. The register layout and the programming sequence follow
++ * Allwinner's vendor driver (pwm-sunxi-group.c, GPL-2.0-or-later), single-channel mode only: no pulse mode,
++ * no dead zone, no capture and no channel groups.
++ *
++ * Limitations:
++ *  - The 24 MHz oscillator is always the clock source, so periods shorter than about 42 ns cannot be made.
++ *  - The two channels of a pair share the divider. A channel is refused (-EBUSY) while its neighbour runs with a
++ *    divider this channel would not need.
++ *  - Output level while the channel is disabled is not defined by this driver.
++ */
++
++#include <linux/bitfield.h>
++#include <linux/bits.h>
++#include <linux/clk.h>
++#include <linux/io.h>
++#include <linux/math64.h>
++#include <linux/module.h>
++#include <linux/platform_device.h>
++#include <linux/pwm.h>
++#include <linux/reset.h>
++#include <linux/time64.h>
++
++#define SUN20I_PWM_NPWM		8
++
++/* Clock configuration of the pair a channel belongs to */
++#define PWM_PCCR(ch)		(0x20 + ((ch) / 2) * 4)
++#define PWM_PCCR_DIV_M		GENMASK(3, 0)	/* the divider is 2^DIV_M, 0 to 8 */
++#define PWM_PCCR_CLK_SRC	GENMASK(8, 7)	/* 0: 24 MHz oscillator, 1: APB1 */
++
++#define PWM_PCGR		0x40		/* clock gate of each channel, bit = channel */
++#define PWM_PER			0x80		/* enable of each channel, bit = channel */
++
++#define PWM_PCR(ch)		(0x100 + (ch) * 0x20)
++#define PWM_PCR_PRESCAL_K	GENMASK(7, 0)	/* prescaler, divides by K + 1 */
++#define PWM_PCR_ACT_STA		BIT(8)		/* 1: active high (normal polarity) */
++
++#define PWM_PPR(ch)		(0x104 + (ch) * 0x20)
++#define PWM_PPR_ENTIRE		GENMASK(31, 16)	/* period in counter clocks, minus one */
++#define PWM_PPR_ACT		GENMASK(15, 0)	/* active time in counter clocks */
++
++#define PWM_MAX_CYCLES		65536
++#define PWM_MAX_DIV_M		8
++
++struct sun20i_pwm {
++	void __iomem *base;
++	unsigned long hosc_rate;
++};
++
++static struct sun20i_pwm *to_sun20i_pwm(struct pwm_chip *chip)
++{
++	return pwmchip_get_drvdata(chip);
++}
++
++static void sun20i_pwm_update(struct sun20i_pwm *pwm, unsigned int reg, u32 mask, u32 val)
++{
++	u32 tmp = readl(pwm->base + reg);
++
++	writel((tmp & ~mask) | (val & mask), pwm->base + reg);
++}
++
++/* Counter settings that make up a period and a duty cycle. */
++struct sun20i_pwm_cfg {
++	u32 div_m;
++	u32 prescal_k;
++	u32 entire;	/* counter clocks per period, 1 to 65536 */
++	u32 act;	/* counter clocks of the active level, 0 to entire */
++};
++
++static int sun20i_pwm_calc(const struct sun20i_pwm *pwm, u64 period_ns, u64 duty_ns,
++			   struct sun20i_pwm_cfg *cfg)
++{
++	u64 clks = mul_u64_u64_div_u64(period_ns, pwm->hosc_rate, NSEC_PER_SEC);
++	u32 m;
++
++	if (!clks)
++		return -EINVAL;
++
++	for (m = 0; m <= PWM_MAX_DIV_M; m++) {
++		u64 k_plus_1 = DIV64_U64_ROUND_UP(clks, (u64)PWM_MAX_CYCLES << m);
++
++		if (k_plus_1 > 256)
++			continue;
++
++		cfg->div_m = m;
++		cfg->prescal_k = k_plus_1 - 1;
++		cfg->entire = div64_u64(clks, (u64)k_plus_1 << m);
++		if (!cfg->entire)
++			return -EINVAL;
++		cfg->act = mul_u64_u64_div_u64(cfg->entire, duty_ns, period_ns);
++		return 0;
++	}
++
++	return -ERANGE;	/* longer than about 2^8 * 2^8 * 2^16 / 24 MHz = 180 s */
++}
++
++static int sun20i_pwm_apply(struct pwm_chip *chip, struct pwm_device *pwmdev,
++			    const struct pwm_state *state)
++{
++	struct sun20i_pwm *pwm = to_sun20i_pwm(chip);
++	unsigned int ch = pwmdev->hwpwm;
++	struct sun20i_pwm_cfg cfg;
++	int ret;
++
++	if (!state->enabled) {
++		sun20i_pwm_update(pwm, PWM_PER, BIT(ch), 0);
++		sun20i_pwm_update(pwm, PWM_PCGR, BIT(ch), 0);
++		return 0;
++	}
++
++	ret = sun20i_pwm_calc(pwm, state->period, state->duty_cycle, &cfg);
++	if (ret)
++		return ret;
++
++	/* The neighbour in the pair must not be running on another divider. */
++	if (readl(pwm->base + PWM_PER) & BIT(ch ^ 1)) {
++		u32 cur = FIELD_GET(PWM_PCCR_DIV_M, readl(pwm->base + PWM_PCCR(ch)));
++
++		if (cur != cfg.div_m)
++			return -EBUSY;
++	}
++
++	sun20i_pwm_update(pwm, PWM_PCCR(ch), PWM_PCCR_CLK_SRC | PWM_PCCR_DIV_M,
++			  FIELD_PREP(PWM_PCCR_CLK_SRC, 0) | FIELD_PREP(PWM_PCCR_DIV_M, cfg.div_m));
++	sun20i_pwm_update(pwm, PWM_PCGR, BIT(ch), BIT(ch));
++	sun20i_pwm_update(pwm, PWM_PCR(ch), PWM_PCR_PRESCAL_K | PWM_PCR_ACT_STA,
++			  FIELD_PREP(PWM_PCR_PRESCAL_K, cfg.prescal_k) |
++			  (state->polarity == PWM_POLARITY_NORMAL ? PWM_PCR_ACT_STA : 0));
++	writel(FIELD_PREP(PWM_PPR_ENTIRE, cfg.entire - 1) |
++	       FIELD_PREP(PWM_PPR_ACT, min_t(u32, cfg.act, FIELD_MAX(PWM_PPR_ACT))),
++	       pwm->base + PWM_PPR(ch));
++	sun20i_pwm_update(pwm, PWM_PER, BIT(ch), BIT(ch));
++
++	return 0;
++}
++
++static int sun20i_pwm_get_state(struct pwm_chip *chip, struct pwm_device *pwmdev,
++				struct pwm_state *state)
++{
++	struct sun20i_pwm *pwm = to_sun20i_pwm(chip);
++	unsigned int ch = pwmdev->hwpwm;
++	u32 pccr = readl(pwm->base + PWM_PCCR(ch));
++	u32 pcr = readl(pwm->base + PWM_PCR(ch));
++	u32 ppr = readl(pwm->base + PWM_PPR(ch));
++	u64 clk_div = (u64)(FIELD_GET(PWM_PCR_PRESCAL_K, pcr) + 1) << FIELD_GET(PWM_PCCR_DIV_M, pccr);
++	u64 entire = (u64)FIELD_GET(PWM_PPR_ENTIRE, ppr) + 1;
++	u64 act = min_t(u64, FIELD_GET(PWM_PPR_ACT, ppr), entire);
++
++	state->enabled = readl(pwm->base + PWM_PER) & BIT(ch);
++	state->polarity = (pcr & PWM_PCR_ACT_STA) ? PWM_POLARITY_NORMAL : PWM_POLARITY_INVERSED;
++	state->period = DIV64_U64_ROUND_UP(entire * clk_div * NSEC_PER_SEC, pwm->hosc_rate);
++	state->duty_cycle = DIV64_U64_ROUND_UP(act * clk_div * NSEC_PER_SEC, pwm->hosc_rate);
++
++	return 0;
++}
++
++static const struct pwm_ops sun20i_pwm_ops = {
++	.apply = sun20i_pwm_apply,
++	.get_state = sun20i_pwm_get_state,
++};
++
++static int sun20i_pwm_probe(struct platform_device *pdev)
++{
++	struct device *dev = &pdev->dev;
++	struct reset_control *rst;
++	struct sun20i_pwm *pwm;
++	struct pwm_chip *chip;
++	struct clk *clk;
++
++	chip = devm_pwmchip_alloc(dev, SUN20I_PWM_NPWM, sizeof(*pwm));
++	if (IS_ERR(chip))
++		return PTR_ERR(chip);
++	pwm = to_sun20i_pwm(chip);
++
++	pwm->base = devm_platform_ioremap_resource(pdev, 0);
++	if (IS_ERR(pwm->base))
++		return PTR_ERR(pwm->base);
++
++	rst = devm_reset_control_get_exclusive_deasserted(dev, NULL);
++	if (IS_ERR(rst))
++		return dev_err_probe(dev, PTR_ERR(rst), "cannot get the reset\n");
++
++	clk = devm_clk_get_enabled(dev, "bus");
++	if (IS_ERR(clk))
++		return dev_err_probe(dev, PTR_ERR(clk), "cannot get the bus clock\n");
++
++	clk = devm_clk_get(dev, "hosc");
++	if (IS_ERR(clk))
++		return dev_err_probe(dev, PTR_ERR(clk), "cannot get the oscillator clock\n");
++	pwm->hosc_rate = clk_get_rate(clk);
++	if (!pwm->hosc_rate)
++		return dev_err_probe(dev, -EINVAL, "the oscillator clock has no rate\n");
++
++	chip->ops = &sun20i_pwm_ops;
++	chip->atomic = true;
++
++	return devm_pwmchip_add(dev, chip);
++}
++
++static const struct of_device_id sun20i_pwm_of_match[] = {
++	{ .compatible = "allwinner,sun20i-d1-pwm" },
++	{ /* sentinel */ }
++};
++MODULE_DEVICE_TABLE(of, sun20i_pwm_of_match);
++
++static struct platform_driver sun20i_pwm_driver = {
++	.driver = {
++		.name = "sun20i-d1-pwm",
++		.of_match_table = sun20i_pwm_of_match,
++	},
++	.probe = sun20i_pwm_probe,
++};
++module_platform_driver(sun20i_pwm_driver);
++
++MODULE_DESCRIPTION("Allwinner D1 / T113 PWM controller driver");
++MODULE_LICENSE("GPL");
+--- /dev/null
++++ b/Documentation/devicetree/bindings/pwm/allwinner,sun20i-d1-pwm.yaml
+@@ -0,0 +1,65 @@
++# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
++%YAML 1.2
++---
++$id: http://devicetree.org/schemas/pwm/allwinner,sun20i-d1-pwm.yaml#
++$schema: http://devicetree.org/meta-schemas/core.yaml#
++
++title: Allwinner D1 / T113 PWM controller
++
++maintainers:
++  - SK-18 project <noreply@example.invalid>
++
++description:
++  Eight PWM channels, in four pairs. Each pair shares a clock source and a
++  divider; each channel has its own prescaler and a 16-bit period and duty
++  counter.
++
++allOf:
++  - $ref: pwm.yaml#
++
++properties:
++  compatible:
++    const: allwinner,sun20i-d1-pwm
++
++  reg:
++    maxItems: 1
++
++  "#pwm-cells":
++    const: 3
++
++  clocks:
++    items:
++      - description: Bus clock
++      - description: 24 MHz oscillator, the clock the counters run from
++
++  clock-names:
++    items:
++      - const: bus
++      - const: hosc
++
++  resets:
++    maxItems: 1
++
++required:
++  - compatible
++  - reg
++  - "#pwm-cells"
++  - clocks
++  - clock-names
++  - resets
++
++unevaluatedProperties: false
++
++examples:
++  - |
++    #include <dt-bindings/clock/sun20i-d1-ccu.h>
++    #include <dt-bindings/reset/sun20i-d1-ccu.h>
++
++    pwm@2000c00 {
++        compatible = "allwinner,sun20i-d1-pwm";
++        reg = <0x02000c00 0x400>;
++        clocks = <&ccu CLK_BUS_PWM>, <&dcxo>;
++        clock-names = "bus", "hosc";
++        resets = <&ccu RST_BUS_PWM>;
++        #pwm-cells = <3>;
++    };

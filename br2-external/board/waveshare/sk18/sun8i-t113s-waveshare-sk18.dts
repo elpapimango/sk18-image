@@ -34,18 +34,13 @@
 	};
 
 	/*
-	 * Backlight. The original uses hardware PWM channel 3 on PG10 at 1 kHz, but Linux 7.3.1 has no
-	 * driver for the T113 PWM block. Interim: a software PWM on the same pin (pwm-gpio, hrtimer).
+	 * Backlight: hardware PWM channel 3 on PG10 at 1 kHz, normal polarity, as the original (CONFIRMED by the
+	 * original DTB and by its register dump: PG10 in mux 2). The controller is the `pwm` node below, driven by
+	 * patches/linux/0003.
 	 */
-	pwm_bl: pwm {
-		compatible = "pwm-gpio";
-		#pwm-cells = <3>;
-		gpios = <&pio 6 10 GPIO_ACTIVE_HIGH>; /* PG10, CONFIRMED by the original DTB (pwm3) */
-	};
-
 	backlight: backlight {
 		compatible = "pwm-backlight";
-		pwms = <&pwm_bl 0 1000000 0>; /* 1 kHz, normal polarity, as the original */
+		pwms = <&pwm 3 1000000 0>;
 		brightness-levels = <0 255>;
 		num-interpolated-steps = <255>;
 		default-brightness-level = <128>; /* the original default is 50 % */
@@ -202,10 +197,35 @@
 	vcc-pf-supply = <&reg_3v3>;
 	vcc-pg-supply = <&reg_3v3>;
 
+	/* PWM channel 3 on PG10, mux 2: CONFIRMED by the stock register dump. */
+	pwm3_pg10_pins: pwm3-pg10-pins {
+		pins = "PG10";
+		function = "pwm3";
+	};
+
 	/* I2C2 on PE12 (SCK) / PE13 (SDA), mux 2: CONFIRMED by the stock DTB and the stock register dump. */
 	i2c2_pe_pins: i2c2-pe-pins {
 		pins = "PE12", "PE13";
 		function = "i2c2";
+	};
+};
+
+/*
+ * PWM controller at 0x02000c00 (the shared dtsi has no node for it; the driver is patches/linux/0003). Only
+ * channel 3, on PG10, is used (the backlight).
+ */
+/ {
+	soc {
+		pwm: pwm@2000c00 {
+			compatible = "allwinner,sun20i-d1-pwm";
+			reg = <0x02000c00 0x400>;
+			clocks = <&ccu CLK_BUS_PWM>, <&dcxo>;
+			clock-names = "bus", "hosc";
+			resets = <&ccu RST_BUS_PWM>;
+			pinctrl-names = "default";
+			pinctrl-0 = <&pwm3_pg10_pins>;
+			#pwm-cells = <3>;
+		};
 	};
 };
 

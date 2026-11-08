@@ -271,3 +271,9 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - Decision: `sk18-keys::layout` holds the measured geometry (origin 75, 13; pitch 218; square 158; window 170). `getInfo` reports it, so the host draws each key where its window is; the splash fills each key's area around the same centres and sizes its letters to the 170 px window (they had overflowed the old cells).
 - Also measured: decode of a 720x1280 JPEG on the Cortex-A7 is 97 ms for the gateway's frames (59 KB) and 140 ms for a busy 330–430 KB picture; framebuffer write 3 ms. No ack problem once connected.
 - Open: verify visually; the ±2 px accuracy of the +12/+3 is read from photos.
+
+## D-037 — Intermittent lost acknowledgements right after boot (2026-11-08, open)
+
+- Observed on the board with image 64761ec4…: for roughly the first 15 minutes after boot many frames got no `cmd 100` ack at the host (gateway warned "no frame acknowledgement, sending anyway", each costing 1.5 s; a Python driver-like loop lost 18 to 40 of 40). The board's trace showed every frame it did receive was acked ~100 ms later with the write returning at once; the lost frames never appeared in the board's log. No USB errors on the host or in the board's dmesg.
+- Later the same test acked 18 of 18 at 127 ms and the gateway logged no warning for minutes.
+- Not explained. Next step if it recurs: compare the host's and the board's frame counters, look at what runs on the board early after boot (wpa_supplicant without credentials, avahi). The daemon keeps the timestamped trace in `--verbose` mode.

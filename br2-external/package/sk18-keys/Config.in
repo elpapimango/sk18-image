@@ -1,0 +1,11 @@
+config BR2_PACKAGE_SK18_KEYS
+	bool "sk18-keys"
+	depends on BR2_PACKAGE_HOST_RUSTC_TARGET_ARCH_SUPPORTS
+	select BR2_PACKAGE_HOST_RUSTC
+	help
+	  Reads the key events of the Waveshare SK-18. The 18 on-screen
+	  keys are reported by a separate controller over UART1 (115200
+	  baud); this decodes the frames and prints the events, with the
+	  key numbering mapped for the way the device is held.
+
+	  Source: client/sk18-keys in this repository.

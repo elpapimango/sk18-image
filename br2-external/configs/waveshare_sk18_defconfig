@@ -10,6 +10,9 @@ BR2_ARM_FPU_NEON_VFPV4=y
 # Reproducibility: every downloaded package must match a pinned hash
 BR2_DOWNLOAD_FORCE_CHECK_HASHES=y
 
+# Our patches (patches/linux/*.patch are applied to the kernel)
+BR2_GLOBAL_PATCH_DIR="$(BR2_EXTERNAL_SK18_PATH)/patches"
+
 # Toolchain: Bootlin prebuilt (glibc, ARMv7 hard float), pinned by Buildroot
 BR2_TOOLCHAIN_EXTERNAL=y
 BR2_TOOLCHAIN_EXTERNAL_BOOTLIN=y

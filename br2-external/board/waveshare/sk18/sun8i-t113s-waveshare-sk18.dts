@@ -33,6 +33,24 @@
 		stdout-path = "serial3:115200n8";
 	};
 
+	/*
+	 * Backlight. The original uses hardware PWM channel 3 on PG10 at 1 kHz, but Linux 7.3.1 has no
+	 * driver for the T113 PWM block. Interim: a software PWM on the same pin (pwm-gpio, hrtimer).
+	 */
+	pwm_bl: pwm {
+		compatible = "pwm-gpio";
+		#pwm-cells = <3>;
+		gpios = <&pio 6 10 GPIO_ACTIVE_HIGH>; /* PG10, CONFIRMED by the original DTB (pwm3) */
+	};
+
+	backlight: backlight {
+		compatible = "pwm-backlight";
+		pwms = <&pwm_bl 0 1000000 0>; /* 1 kHz, normal polarity, as the original */
+		brightness-levels = <0 255>;
+		num-interpolated-steps = <255>;
+		default-brightness-level = <128>; /* the original default is 50 % */
+	};
+
 	/* ASSUMED: board wide 5 V from the USB-C socket */
 	reg_vcc5v: regulator-5v {
 		compatible = "regulator-fixed";
@@ -80,6 +98,42 @@
 
 &dcxo {
 	clock-frequency = <24000000>;
+};
+
+/*
+ * Display: mixer -> TCON top -> TCON LCD0 -> MIPI-DSI (2 lanes, video mode) -> panel.
+ * All CONFIRMED by the original DTB and vendor driver (docs/phase5-display.md).
+ */
+&de {
+	status = "okay";
+};
+
+&mixer0 {
+	status = "okay";
+};
+
+&tcon_top {
+	status = "okay";
+};
+
+&tcon_lcd0 {
+	status = "okay";
+};
+
+&dphy {
+	status = "okay";
+};
+
+&dsi {
+	status = "okay";
+
+	panel@0 {
+		compatible = "waveshare,sk18-panel";
+		reg = <0>;
+		power-supply = <&reg_3v3>; /* ASSUMED: the panel supply is not switchable */
+		enable-gpios = <&pio 4 5 GPIO_ACTIVE_HIGH>; /* PE5, driven high by the original; role unknown */
+		backlight = <&backlight>;
+	};
 };
 
 /* USB host port (the Wi-Fi adapter). VBUS control is unknown: treated as always on. */

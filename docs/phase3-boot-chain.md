@@ -18,9 +18,9 @@ Status labels: **Confirmed** (read from the image or from the pinned sources), *
   vendor values. The vendor header also has `TPR1=0x02423190`, `TPR2=0x0008b061`, `TPR3=0xb4787896`,
   `TPR6=0x48`, `para1=0x10d2`; the MQ-R defconfig leaves them at the Kconfig defaults (0 for TPR1 to 3)
   and boots with them, so the SK-18 should too.
-- **Mainline Linux 7.3.1 (Confirmed):** `sun8i-t113s.dtsi` and the shared MQ-R board file exist. For the
-  display, D1/T113 support exists for the DE2 mixer and the LCD TCON; I found no D1/T113 compatible in
-  the MIPI-DSI driver.
+- **Mainline Linux 7.3.1 (Confirmed):** `sun8i-t113s.dtsi` and the shared MQ-R board file exist. The
+  display pipeline (DE2 mixer, TCON, MIPI-DSI, D-PHY) is described in the shared dtsi; an earlier version
+  of this note said DSI was missing, which was wrong (see `docs/phase5-display.md`).
 - **Not known:** where the UART3 pins (PB6/PB7) are exposed on the board, the DDR3 chip part number, the
   panel interface (the original DTB says interface type 4 with 2 lanes; probably DSI).
 

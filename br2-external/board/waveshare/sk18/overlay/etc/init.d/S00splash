@@ -8,8 +8,9 @@ BACKLIGHT=/sys/class/backlight/backlight/brightness
 case "$1" in
 	start)
 		(
-			/usr/bin/sk18-splash --orientation 90 --brightness 128 ||
-				{ echo "sk18-splash failed: switching the backlight on" > /dev/kmsg; echo 128 > "$BACKLIGHT"; }
+			# the program's own error message goes to the kernel log, so a failure can be read on the serial link
+			err=$(/usr/bin/sk18-splash --orientation 90 --brightness 128 2>&1) ||
+				{ echo "sk18-splash failed ($err): switching the backlight on" > /dev/kmsg; echo 128 > "$BACKLIGHT"; }
 		) > /dev/null 2>&1 &
 		;;
 	stop | restart | reload) ;;

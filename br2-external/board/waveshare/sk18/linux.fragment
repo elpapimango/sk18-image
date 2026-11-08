@@ -26,6 +26,9 @@ CONFIG_DRM_SUN6I_DSI=y
 CONFIG_DRM_SUN8I_MIXER=y
 CONFIG_PHY_SUN6I_MIPI_DPHY=y
 CONFIG_DRM_PANEL_HIMAX_HX8394=y
+# /dev/fb0 and its sysfs entries for userspace (the animation, later the client). Without this the kernel still has a
+# framebuffer for the text console but exposes no device node: FB_DEVICE defaults to FB, which is off.
+CONFIG_FB_DEVICE=y
 CONFIG_PWM=y
 CONFIG_PWM_SUN20I_D1=y
 CONFIG_HIGH_RES_TIMERS=y

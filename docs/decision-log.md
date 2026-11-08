@@ -233,3 +233,11 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - **What the user will see:** dark until userspace starts (a few seconds after power-on: U-Boot and the kernel cannot be animated), then the 2 s animation, then a black screen with the backlight on until the client exists.
 - **Packaging:** `sk18-splash` is a second local-source Buildroot package with the same vendoring hook as `sk18-keys`; `client/` is one workspace.
 - **Image `9a789989…`** flashed with the Wi-Fi credentials carried over. **Not yet verified on the board:** that nothing at all shows on the panel before the animation, the real timing, that the colours are right (the pixel format is assumed XRGB8888), that fbcon does not draw over the frames, and the orientation.
+
+## D-032 The first animation test failed: no /dev/fb0 (2026-11-08)
+- **Observed (image `9a789989…`):** the user saw an all black screen. The kernel log on the board said `sk18-splash failed: switching the backlight on` at 8.4 s, i.e. the animation program gave up after waiting its 5 s for the framebuffer, and the init script's safety net switched the backlight on. The kernel itself had registered a framebuffer (`fb0: sun4i-drmdrmfb frame buffer device`, 2.7 s) but `/dev/fb*` did not exist and `/sys/class/graphics` held only `fbcon`.
+- **Cause:** `CONFIG_FB_DEVICE` was off. It controls the legacy `/dev/fb*` node and its sysfs entries; it defaults to `FB`, which is also off here (only `FB_CORE` and the DRM fbdev emulation are on). The text console does not need it, which is why every earlier screen test worked.
+- **Fix:** `CONFIG_FB_DEVICE=y` in the kernel fragment. Also: `S00splash` now puts the program's own error text into the kernel log (it went to `/dev/null` before), so the next failure explains itself on the serial link.
+- **What held up:** the "no boot text" part (the user saw none) and the fail-safe (the backlight came on although the animation did not run).
+- **Lesson:** I assumed `/dev/fb0` exists on the strength of the display working and did not check the device node before building on it. Checking the interface a program depends on, on the real image, comes before building the program.
+- **Image `7a2eb325…`** flashed with the credentials carried over. The animation itself (colours, letters, timing, orientation) is still unverified on the board.

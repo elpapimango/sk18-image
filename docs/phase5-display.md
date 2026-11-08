@@ -134,7 +134,7 @@ Method: `tools/stock-regs` (stock side, kernel module) and `tools/stock-regs/mai
   register leftovers (last long write B2/12 bytes, then display-on).
 - **Panel identity:** HX8394 family, 720x1280, 2 lanes, 70 MHz. Mainline already has this family for Waveshare's 5.0" DSI panel
   (`waveshare,5.0-dsi-touch-a` in `panel-himax-hx8394.c`); the SK-18 table is the same up to the gamma table and then ends with a longer SETDISP.
-- **Fix (not yet run on the board):** see decision D-020. `patches/linux/0001` adds `waveshare,sk18-panel` to `panel-himax-hx8394.c` with the exact stock sequence,
+- **Fix (works on the board, 2026-11-08, console text visible):** see decision D-020. `patches/linux/0001` adds `waveshare,sk18-panel` to `panel-himax-hx8394.c` with the exact stock sequence,
   sleep-out, 120 ms, display-on; the DTS powers the panel through an active-low regulator on PE5.
 - **If still black:** try mainline's tail (`B1 00`, `BD 00` after `BD 01`); try `MIPI_DSI_MODE_VIDEO_BURST`; then the TCON `CPU_IF` / `DCLK` differences;
   then the order of events (stock U-Boot starts the video stream and the commands in a different order than the sun6i host does).

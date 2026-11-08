@@ -176,3 +176,9 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - **Host-side builds:** keep `cargo` output out of `client/` (`CARGO_TARGET_DIR`), because the local-source rsync copies everything under `client/`.
 - **Caught by the cross-check:** a borrow error in the Unix-only serial path, invisible to the Windows build; found by `cargo check --target armv7-unknown-linux-gnueabihf` before it reached the board.
 - **Not yet verified on the board:** that the binary runs there and prints the events for real key presses.
+
+## D-025 sk18-keys verified on the board (2026-11-08)
+- **Observed (image `c4628b30…`, `sk18-keys --port /dev/ttyS0 --orientation 90`, run on the SK-18 and read over the USB serial link):** the binary starts and opens UART1 at 115200 on the real hardware. The user held the device as in use and pressed, in order: top-left, top-right, bottom-right, bottom-left, five quick taps on one key, one hold of about 3 s. Output: `key(0,0)`, `key(0,5)`, `key(2,5)`, `key(2,0)` for the four corners (firmware `(5,0)`, `(0,0)`, `(0,2)`, `(5,2)`), five press/release pairs for the taps, one press/release pair for the hold (no auto-repeat events). No lost or doubled events and no decoder errors visible. The mapping agrees with the red/blue/green observation of D-009.
+- **Incident:** the first run was lost because the USB cable was unplugged; the SK-18 is powered through that cable, so it rebooted and the recording (in `/tmp`) was gone. Redone from the start.
+- **Not verified:** how long a hold lasts (the output has no timestamps; add `--timestamps` before relying on it), and long-run behaviour. The decoder statistics are only printed in `--file` mode.
+- **Next:** hand the events to a consumer: OpenDeck / `controldeck-rs` (needs the network, so Wi-Fi first, or the USB link to the host), and drive the screen (key images) from the device itself.

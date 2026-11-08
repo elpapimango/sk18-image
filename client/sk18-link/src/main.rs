@@ -38,10 +38,23 @@ mod run {
     /// The host connection shared by the thread that answers requests and the one that reports key presses.
     type Link = Arc<Mutex<Option<File>>>;
 
-    fn send(link: &Link, frame: &Frame) {
+    /// Milliseconds since the first call, for the verbose log.
+    fn ms() -> u128 {
+        static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+        START.get_or_init(std::time::Instant::now).elapsed().as_millis()
+    }
+
+    fn send(link: &Link, frame: &Frame, verbose: bool) {
         if let Some(port) = link.lock().expect("link lock").as_mut() {
+            let bytes = frame.encode();
+            if verbose {
+                eprintln!("sk18-link: [{} ms] reply id {} cmd {} ({} bytes): writing", ms(), frame.id, frame.cmd, bytes.len());
+            }
             // A failed write means the host went away; the read side notices and reconnects.
-            let _ = port.write_all(&frame.encode());
+            let r = port.write_all(&bytes);
+            if verbose {
+                eprintln!("sk18-link: [{} ms] reply id {} written: {:?}", ms(), frame.id, r.map_err(|e| e.to_string()));
+            }
         }
     }
 
@@ -61,7 +74,7 @@ mod run {
                                 if verbose {
                                     eprintln!("sk18-link: key ({}, {}) {}", k.row, k.col, if k.pressed { "down" } else { "up" });
                                 }
-                                send(&link, &key_event(k.row, k.col, k.pressed));
+                                send(&link, &key_event(k.row, k.col, k.pressed), verbose);
                             }
                         });
                     }
@@ -110,8 +123,11 @@ mod run {
                     Ok(n) => {
                         decoder.push(&buf[..n]);
                         while let Some(frame) = decoder.next_frame() {
+                            if o.verbose {
+                                eprintln!("sk18-link: [{} ms] frame id {} cmd {} ({} bytes) received", ms(), frame.id, frame.cmd, frame.data.len());
+                            }
                             for reply in device.handle(&frame) {
-                                send(&link, &reply);
+                                send(&link, &reply, o.verbose);
                             }
                         }
                     }

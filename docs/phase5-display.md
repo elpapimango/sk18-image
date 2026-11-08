@@ -14,7 +14,7 @@ Source: the board DTB node `lcd0@5461000` (`docs/phase2-image-analysis.md`) and 
 | Pins | `dsi4lane` group, function `dsi`, PD0 to PD9 (the 4-lane pin group; the controller uses 2 lanes) | DTB pinctrl |
 | Resolution / timing | 720x1280, pixel clock 70 MHz, htotal 900, hbp 100 (includes hsync 20), vtotal 1312, vbp 16 (includes vsync 4); about 59 Hz | DTB |
 | Derived Linux timing | hdisplay 720, hsync_start 800, hsync_end 820, htotal 900; vdisplay 1280, vsync_start 1296, vsync_end 1300, vtotal 1312; clock 70000 kHz | computed from the above (front porch = total - active - back porch: 80 and 16) |
-| Panel driver | `default_lcd` (`default_panel.c`); its `LCD_panel_init()` and `LCD_panel_exit()` are **empty**: the host sends **no DSI init commands** | vendor source |
+| Panel driver | `default_lcd` (`default_panel.c`); its `LCD_panel_init()` and `LCD_panel_exit()` are **empty**: the *kernel* sends no DSI init commands. **Superseded below:** the stock *U-Boot* does send a full HX8394 init (found 2026-11-08) | vendor source |
 | Power-on sequence | power, 30 ms; panel init (nothing), 50 ms; TCON enable, 100 ms; backlight on | vendor source |
 | Panel GPIO | `lcd_gpio_0` = PE5, driven high at probe; never toggled by `default_panel.c` | DTB, vendor source (role Unknown: panel enable, reset or backlight enable) |
 | Backlight | PWM channel 3 on **PG10**, 1 kHz, normal polarity, 0 to 255, default 50 | DTB |
@@ -111,5 +111,30 @@ found nothing. The ports are wired in the dtsi (`tcon_lcd0_out_dsi` to `dsi_in_t
   5.4.61 and same relevant config), `vermagic=5.4.61 SMP preempt mod_unload ARMv7 p2v8` as the stock modules; all seven imported symbols exist in the stock kernel.
   The GCC plugin of the SDK tree does not load into the vendor gcc, so the build disables it (`gccwrap.sh`).
   Loaded by the stock-card hook `tools/stock-regs/stock-lunch.sh` (`lunch.sh` on the FAT partition, then `/mnt/SDCARD/regs_a.txt` and `regs_b.txt`).
-- **Safety:** the FAT partition of the stock card was backed up byte for byte first (`~/sk18-backups/stock-p1-before-20261108-123345.bin` on the DietPi machine);
+- **Safety (stock card):** the FAT partition of the stock card was backed up byte for byte first (`~/sk18-backups/stock-p1-before-20261108-123345.bin` on the DietPi machine);
   only `lunch.sh` and the module were added, and they are removed again after the run.
+
+## Register comparison, stock vs mainline (2026-11-08): the panel was never initialised
+
+Method: `tools/stock-regs` (stock side, kernel module) and `tools/stock-regs/mainline-dump.cmds` (mainline side, `devmem`), compared with
+`work/regs_diff.py`. Both dumps taken with the display running (stock: picture; mainline: pipeline up, screen black, backlight on).
+
+- **Same on both:** CCU display clocks and gates (PLL_VIDEO0, DE, DSI, TCON LCD0), TCON top, D-PHY (one reserved-looking bit), the mixer
+  chain (layer enabled, same blender routing), DE top. Clocks, routing and the pixel path are not the cause.
+- **Different, and meaningful:**
+  1. DSI command buffer (+0x300..+0x340): stock holds DCS packets, mainline is empty. Decoded: last short write `05 29 00 1c` (**display on**),
+     last long write **B2** (12 parameters), whose 2-byte CRC (`5f bc`) sits over the tail of an earlier **E0** (gamma) write.
+  2. PE5 (`PE_DAT` bit 5): **low** on stock, **high** on mainline. PE5 is an output on both. Active-low panel power enable.
+- **Different, probably irrelevant for a video-mode DSI panel:** TCON0 `DCLK` enable bits (+0x44: `0xf0000004` vs `0x80000004`), `CPU_IF` (+0x60: bit 22 set
+  on stock, FIFO-flush bit 16 set on mainline), `IO_TRI` (+0x8c), DSI trigger words (+0x160..+0x168, +0x1f0), gamma/CMAP tables (unused: `lcd_gamma_en = 0`),
+  PD drive strength (3 vs 2), PE/PG pins that mainline has not muxed yet (touch I2C on PE12/PE13, SDIO/other on PG).
+- **Where the commands come from:** not the stock kernel (its `default_lcd` init is empty, as found before) but the stock **U-Boot**, which initialises the
+  panel at boot (the boot animation) and leaves it running when the kernel starts. The tables are in the U-Boot image (`rawboot.bin` offset `0x010941b4` in the
+  extracted partitions): three panel variants (HX8394, HX8399, an Ilitek-style set) selected through `lcd_compatible_index.txt`. The HX8394 table matches the
+  register leftovers (last long write B2/12 bytes, then display-on).
+- **Panel identity:** HX8394 family, 720x1280, 2 lanes, 70 MHz. Mainline already has this family for Waveshare's 5.0" DSI panel
+  (`waveshare,5.0-dsi-touch-a` in `panel-himax-hx8394.c`); the SK-18 table is the same up to the gamma table and then ends with a longer SETDISP.
+- **Fix (not yet run on the board):** see decision D-020. `patches/linux/0001` adds `waveshare,sk18-panel` to `panel-himax-hx8394.c` with the exact stock sequence,
+  sleep-out, 120 ms, display-on; the DTS powers the panel through an active-low regulator on PE5.
+- **If still black:** try mainline's tail (`B1 00`, `BD 00` after `BD 01`); try `MIPI_DSI_MODE_VIDEO_BURST`; then the TCON `CPU_IF` / `DCLK` differences;
+  then the order of events (stock U-Boot starts the video stream and the commands in a different order than the sun6i host does).

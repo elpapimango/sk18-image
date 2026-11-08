@@ -79,6 +79,17 @@
 	};
 
 	/* ASSUMED: 2.8 V analog rail feeding bank E, as on the MQ-R */
+	/* Panel power switch on PE5; the pin is LOW while the panel is powered (see the panel node). */
+	reg_lcd: regulator-lcd {
+		compatible = "regulator-fixed";
+		regulator-name = "lcd-power";
+		regulator-min-microvolt = <3300000>;
+		regulator-max-microvolt = <3300000>;
+		vin-supply = <&reg_3v3>;
+		gpio = <&pio 4 5 GPIO_ACTIVE_LOW>;
+		startup-delay-us = <20000>;
+	};
+
 	reg_avdd2v8: regulator-avdd {
 		compatible = "regulator-fixed";
 		regulator-name = "avdd2v8";
@@ -135,11 +146,17 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&dsi_4lane_pins>;
 
+	/*
+	 * HX8394-family controller. It needs the initialisation sequence of patches/linux/0001, which the
+	 * stock U-Boot sends before the stock kernel starts (so the stock kernel never sends it).
+	 * PE5 is the panel power enable, ACTIVE LOW: the register dump of the working stock system shows it
+	 * configured as an output and driven low (docs/phase5-display.md), and the vendor DTB gives it flag 1.
+	 */
 	panel@0 {
-		compatible = "waveshare,sk18-panel";
+		compatible = "waveshare,sk18-panel", "himax,hx8394";
 		reg = <0>;
-		power-supply = <&reg_3v3>; /* ASSUMED: the panel supply is not switchable */
-		enable-gpios = <&pio 4 5 GPIO_ACTIVE_HIGH>; /* PE5, driven high by the original; role unknown */
+		vcc-supply = <&reg_lcd>;
+		iovcc-supply = <&reg_lcd>;
 		backlight = <&backlight>;
 	};
 };

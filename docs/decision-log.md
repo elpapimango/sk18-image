@@ -100,3 +100,9 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - **Flashed:** to a second, new SD card in the DietPi machine's reader (factory FAT32, 4,026,531,840 bytes, USB, removable, unmounted, not the system disk). Note: the serial `3063422494200319` that `flash.sh` matches is the card **reader's** serial, so it does not tell cards apart; the size, the factory layout and the unmounted state were what identified this card. Read back identical.
 - **Side finding:** after a half-finished file transfer over the serial console (my script), the SK-18 console stopped answering although the USB gadget stayed enumerated. Not investigated further; a fresh boot from the new card replaces that state. The transfer approach is abandoned in favour of re-flashing the card.
 - **Next:** the user puts this card into the SK-18; check the screen and the console messages. Roll back: any earlier card.
+
+## D-016 DSI pad mux fix built and flashed (2026-11-07)
+- **Observed:** with patch 0002 the display pipeline probes and the kernel reports a connected, enabled 720x1280 connector, but the screen is black (backlight on). Details in `docs/phase5-display.md`.
+- **Changed:** `pinctrl-0 = <&dsi_4lane_pins>` on `&dsi` (PD0 to PD9, function `dsi`, drive strength 30), commit `4ab85d3`. Image SHA-256 `2de7a130d1ae3a63ee93e61e2b04fdac8cbdbba499d0d5aab354abe72300ff85`, PARTUUID `540e6ce1-a6a0-4e45-94a0-41b16c636a18`.
+- **Flashed:** to the card in the DietPi machine's reader. Before writing I checked that it held one of our own images (PARTUUID `ba26212a-…`, the first display image), 4,026,531,840 bytes, USB, removable, unmounted, not the system disk. Read back identical. (The user now uses two cards: one in the SK-18, one in the reader.)
+- **Next:** swap the cards; look at the screen.

@@ -33,7 +33,7 @@ RM=$(lsblk -dno RM "$DEV")
 MNT=$(lsblk -no MOUNTPOINTS "$DEV" | tr -d ' \n')
 ROOTDISK=$(lsblk -no PKNAME "$(findmnt -no SOURCE /)" 2>/dev/null)
 [ "$SIZE" = "$WANT_BYTES" ] || die "size $SIZE != $WANT_BYTES (no card in the reader?)"
-[ "$TRAN" = "usb" ] && [ "$RM" = "1" ] || die "not a removable USB disk"
+if [ "$TRAN" != "usb" ] || [ "$RM" != "1" ]; then die "not a removable USB disk"; fi
 [ -z "$MNT" ] || die "something is mounted: $MNT"
 [ "/dev/$ROOTDISK" != "$DEV" ] || die "this is the system disk"
 [ "$IMG_BYTES" -le "$SIZE" ] || die "image larger than the card"
@@ -53,12 +53,40 @@ NPART=$(lsblk -no TYPE "$DEV" | grep -c part)
 if [ "$KIND" = "blank or factory-formatted" ] && [ "$NPART" -gt 1 ]; then die "unknown content: $NPART partitions, none of them ours"; fi
 echo "card content: $KIND"
 
+# Wi-Fi credentials already on this card (from provision-wifi.sh) are carried over to the new image, so that
+# reflashing does not mean typing the passphrase again. They are held in a private temporary file on this machine
+# only for the duration of the flash and removed afterwards.
+KEEP=""
+trap '[ -z "$KEEP" ] || rm -f "$KEEP"' EXIT
+if [ "$KIND" != "blank or factory-formatted" ]; then
+  sudo mkdir -p /mnt/sk18p1
+  if sudo mount -t ext4 -o ro "${DEV}1" /mnt/sk18p1 2>/dev/null; then
+    if sudo grep -q '^network=' /mnt/sk18p1/etc/wpa_supplicant.conf 2>/dev/null; then
+      KEEP=$(mktemp); chmod 600 "$KEEP"
+      sudo cat /mnt/sk18p1/etc/wpa_supplicant.conf | tee "$KEEP" > /dev/null
+      echo "Wi-Fi credentials found on the card: they will be copied to the new image"
+    else
+      echo "no Wi-Fi credentials on the card (run provision-wifi.sh after flashing)"
+    fi
+    sudo umount /mnt/sk18p1
+  fi
+fi
+
 echo "=== writing $IMG_BYTES bytes to $DEV"
 sudo dd if="$IMG" of="$DEV" bs=1M conv=fsync status=progress 2>&1 | tail -2
 sync; sudo blockdev --flushbufs "$DEV"
 READ_SHA=$(sudo dd if="$DEV" bs=1M iflag=direct count=$(( (IMG_BYTES + 1048575) / 1048576 )) status=none | head -c "$IMG_BYTES" | sha256sum | cut -d' ' -f1)
 echo "image : $WANT_SHA"
 echo "card  : $READ_SHA"
-[ "$READ_SHA" = "$WANT_SHA" ] && echo "VERIFIED: the card matches the image" || die "READ-BACK MISMATCH"
+if [ "$READ_SHA" = "$WANT_SHA" ]; then echo "VERIFIED: the card matches the image"; else die "READ-BACK MISMATCH"; fi
 sudo partprobe "$DEV" 2>/dev/null; sleep 1
 lsblk -o NAME,SIZE,FSTYPE,PARTUUID "$DEV"
+if [ -n "$KEEP" ]; then
+  # This changes the card after the read-back check above: the check covers the image as written, and the only
+  # difference afterwards is this one file.
+  sudo mount -t ext4 -o rw "${DEV}1" /mnt/sk18p1 || die "cannot mount the new image to restore the Wi-Fi credentials"
+  sudo install -m 0600 -o root -g root "$KEEP" /mnt/sk18p1/etc/wpa_supplicant.conf
+  sync
+  sudo umount /mnt/sk18p1
+  echo "Wi-Fi credentials restored on the new image (mode 0600)"
+fi

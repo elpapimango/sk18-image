@@ -241,3 +241,13 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - **What held up:** the "no boot text" part (the user saw none) and the fail-safe (the backlight came on although the animation did not run).
 - **Lesson:** I assumed `/dev/fb0` exists on the strength of the display working and did not check the device node before building on it. Checking the interface a program depends on, on the real image, comes before building the program.
 - **Image `7a2eb325…`** flashed with the credentials carried over. The animation itself (colours, letters, timing, orientation) is still unverified on the board.
+
+## D-033 Boot animation verified on the board (2026-11-08)
+- **Observed (image `7a2eb325…`):** `/dev/fb0` exists (720x1280, 32 bpp, stride 2880), no `sk18-splash failed` line in the kernel log, the backlight reads 128. The user said it looks good, and sent a phone video of the whole boot (`IMG_3534.MOV`, 15 s, 1920x1080 at 24 fps; kept by the user, not in the repository). Frames extracted at 4 per second:
+  - the panel is fully dark for about the first 4 to 5 s: no text, no cursor, no flash before the animation (the requirement "I do not want to see boot logs");
+  - then the rainbow sweep, red/orange at the top left through yellow, green and blue to pink at the bottom right (as seen by the user), the squares lined up with the physical key caps;
+  - then the colours fade while S K 1 8 appear on the four middle keys of the middle row, upright, white, block letters; they hold, and everything fades to black.
+  - From the first colour to black is about 2 s (4 fps sampling: approximate).
+- **Not measured:** the exact dark time from power-on (the video starts with the device being moved into view), and the colour accuracy (the camera over-exposes the panel).
+- **State now:** after the animation the screen is black with the backlight on, until the client exists.
+- **Next:** the on-device client (task 6): key events to OpenDeck / controldeck-rs, images from OpenDeck onto the keys.

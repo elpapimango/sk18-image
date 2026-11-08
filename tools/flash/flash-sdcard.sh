@@ -9,7 +9,7 @@ WANT_SHA=${1:?usage: flash2.sh <sha256 of /tmp/sk18-sdcard.img>}
 WANT_SERIAL=3063422494200319   # the card reader's serial, NOT the card's
 WANT_BYTES=4026531840
 # PARTUUIDs of the ext4 partitions of the mainline images flashed so far
-KNOWN="0915bee9-7461-4b03-9e9d-3e6d87e23276 ba26212a-aed0-4795-b8a4-f010ac5120fb 294d0c07-a840-4b9a-8280-1a8731c64ef2 540e6ce1-a6a0-4e45-94a0-41b16c636a18 4e50dc54-8778-4535-96c8-ae4cbe10204f ca28bcff-985f-428f-a81a-233d780e0a99 9c370377-2e0c-4b6d-b228-bb82f205314d 00887ae7-2a62-487f-bfef-9a0ec0642128"
+KNOWN="0915bee9-7461-4b03-9e9d-3e6d87e23276 ba26212a-aed0-4795-b8a4-f010ac5120fb 294d0c07-a840-4b9a-8280-1a8731c64ef2 540e6ce1-a6a0-4e45-94a0-41b16c636a18 4e50dc54-8778-4535-96c8-ae4cbe10204f ca28bcff-985f-428f-a81a-233d780e0a99 9c370377-2e0c-4b6d-b228-bb82f205314d 00887ae7-2a62-487f-bfef-9a0ec0642128 3600f3f1-eb36-4c79-bff0-89dcf13dec5d"
 
 die() { echo "ABORT: $*"; exit 1; }
 

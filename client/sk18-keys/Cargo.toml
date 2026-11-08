@@ -1,0 +1,19 @@
+[package]
+name = "sk18-keys"
+description = "Reads the key events of the Waveshare SK-18 from its UART1 key controller"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "sk18_keys"
+
+[[bin]]
+name = "sk18-keys"
+path = "src/main.rs"
+
+# The serial port code is Unix only; the frame decoder and the orientation maths build everywhere
+# (so the unit tests run on the development PC as well as on the board).
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1", default-features = false, features = ["std", "fs", "termios"] }

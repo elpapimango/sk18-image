@@ -87,6 +87,7 @@ BR2_PACKAGE_NSS_MDNS=y
 
 # On-device client (client/ in this repository)
 BR2_PACKAGE_SK18_KEYS=y
+BR2_PACKAGE_SK18_SPLASH=y
 
 # Host tools
 BR2_PACKAGE_HOST_GENIMAGE=y

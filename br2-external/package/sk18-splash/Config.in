@@ -1,0 +1,11 @@
+config BR2_PACKAGE_SK18_SPLASH
+	bool "sk18-splash"
+	depends on BR2_PACKAGE_HOST_RUSTC_TARGET_ARCH_SUPPORTS
+	select BR2_PACKAGE_HOST_RUSTC
+	help
+	  Boot animation of the Waveshare SK-18: every key in its own
+	  colour, then SK18 on the four middle keys, then black. Drawn
+	  straight to the framebuffer; the backlight is switched on after
+	  the first frame.
+
+	  Source: client/sk18-splash in this repository.

@@ -43,7 +43,7 @@
 		pwms = <&pwm 3 1000000 0>;
 		brightness-levels = <0 255>;
 		num-interpolated-steps = <255>;
-		default-brightness-level = <128>; /* the original default is 50 % */
+		default-brightness-level = <0>; /* dark until userspace (sk18-splash) switches it on: no boot text on the panel */
 	};
 
 	/* ASSUMED: board wide 5 V from the USB-C socket */

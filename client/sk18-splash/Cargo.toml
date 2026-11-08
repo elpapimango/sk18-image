@@ -1,0 +1,18 @@
+[package]
+name = "sk18-splash"
+description = "Boot animation of the Waveshare SK-18: rainbow keys, SK18, fade to black"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "sk18_splash"
+
+[[bin]]
+name = "sk18-splash"
+path = "src/main.rs"
+
+[dependencies]
+# Orientation maths shared with the key reader (how the device is held).
+sk18-keys = { path = "../sk18-keys" }

@@ -1,0 +1,21 @@
+#!/bin/sh
+# Boot animation. It is the first thing started: it runs in the background and the rest of the boot goes on while
+# it plays (2 s). The backlight stays off (default brightness 0 in the device tree) until the animation has drawn
+# its first frame, so the panel shows no boot text at all. If the animation fails for any reason, the backlight is
+# switched on anyway, so a failure never leaves the device looking dead.
+BACKLIGHT=/sys/class/backlight/backlight/brightness
+
+case "$1" in
+	start)
+		(
+			/usr/bin/sk18-splash --orientation 90 --brightness 128 ||
+				{ echo "sk18-splash failed: switching the backlight on" > /dev/kmsg; echo 128 > "$BACKLIGHT"; }
+		) > /dev/null 2>&1 &
+		;;
+	stop | restart | reload) ;;
+	*)
+		echo "usage: $0 start" >&2
+		exit 1
+		;;
+esac
+exit 0

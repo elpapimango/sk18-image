@@ -1,5 +1,5 @@
 [workspace]
-members = ["sk18-keys"]
+members = ["sk18-keys", "sk18-splash"]
 resolver = "2"
 
 [workspace.package]

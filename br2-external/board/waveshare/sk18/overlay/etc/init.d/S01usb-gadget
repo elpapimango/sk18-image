@@ -1,0 +1,57 @@
+#!/bin/sh
+# USB gadget of the SK-18: one device, two CDC-ACM serial ports.
+#   acm.usb0 -> /dev/ttyGS0 on the device, ttyACM0 on the host: the deck protocol (sk18-link)
+#   acm.usb1 -> /dev/ttyGS1 on the device, ttyACM1 on the host: the login console (getty, see inittab)
+# The ID is 1d6b:0104, the one the controldeck driver (deck-sk18) looks for. There is deliberately NO serial
+# number string, like the stock firmware: the host derives the device id from it, and a new id would lose the
+# user's OpenDeck layout.
+G=/sys/kernel/config/usb_gadget/sk18
+
+start() {
+	mountpoint -q /sys/kernel/config || mount -t configfs none /sys/kernel/config || return 1
+	[ -d "$G" ] && return 0
+	mkdir "$G" || return 1
+	cd "$G" || return 1
+	echo 0x1d6b > idVendor
+	echo 0x0104 > idProduct
+	echo 0x0100 > bcdDevice
+	echo 0x0200 > bcdUSB
+	mkdir strings/0x409
+	echo "SK18 open firmware" > strings/0x409/manufacturer
+	echo "SK-18 Deck" > strings/0x409/product
+	mkdir configs/c.1
+	mkdir configs/c.1/strings/0x409
+	echo "Deck protocol and console" > configs/c.1/strings/0x409/configuration
+	echo 250 > configs/c.1/MaxPower
+	mkdir functions/acm.usb0 functions/acm.usb1
+	ln -s functions/acm.usb0 configs/c.1/
+	ln -s functions/acm.usb1 configs/c.1/
+	# the controller shows up a moment after the kernel started
+	i=0
+	udc=""
+	while [ -z "$udc" ] && [ "$i" -lt 50 ]; do
+		for u in /sys/class/udc/*; do
+			[ -e "$u" ] && udc=$(basename "$u") && break
+		done
+		[ -n "$udc" ] || sleep 0.1
+		i=$((i + 1))
+	done
+	[ -n "$udc" ] || return 1
+	echo "$udc" > UDC
+}
+
+stop() {
+	[ -d "$G" ] || return 0
+	echo "" > "$G/UDC" 2>/dev/null
+	rm -f "$G"/configs/c.1/acm.usb0 "$G"/configs/c.1/acm.usb1
+	rmdir "$G"/configs/c.1/strings/0x409 "$G"/configs/c.1 "$G"/functions/acm.usb0 "$G"/functions/acm.usb1 \
+		"$G"/strings/0x409 "$G"
+}
+
+case "$1" in
+	start) start || echo "S01usb-gadget: could not set up the USB gadget" > /dev/kmsg ;;
+	stop) stop ;;
+	restart) stop; start ;;
+	*) echo "usage: $0 {start|stop|restart}" >&2; exit 1 ;;
+esac
+exit 0

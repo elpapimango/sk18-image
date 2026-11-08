@@ -1,5 +1,6 @@
 # Kernel options on top of arch/arm/configs/sunxi_defconfig.
-# First milestone: boot to a shell on the UART (ttyS3) and on the USB serial gadget (ttyGS0).
+# Boot to a shell on the UART (ttyS3) and on the USB gadget's second serial port (ttyGS1); the first (ttyGS0) carries
+# the deck protocol.
 
 # Console
 CONFIG_SERIAL_EARLYCON=y
@@ -8,7 +9,8 @@ CONFIG_SERIAL_8250_CONSOLE=y
 CONFIG_SERIAL_8250_DW=y
 CONFIG_SERIAL_OF_PLATFORM=y
 
-# USB: OTG controller in peripheral mode with a built-in serial gadget (no module loading needed)
+# USB: OTG controller in peripheral mode with a composite gadget built from configfs (S01usb-gadget): two CDC-ACM
+# serial ports under the ID the host driver (deck-sk18) looks for. Everything built in, no module loading needed.
 CONFIG_USB_SUPPORT=y
 CONFIG_USB_MUSB_HDRC=y
 CONFIG_USB_MUSB_SUNXI=y
@@ -16,7 +18,8 @@ CONFIG_USB_MUSB_DUAL_ROLE=y
 CONFIG_NOP_USB_XCEIV=y
 CONFIG_PHY_SUN4I_USB=y
 CONFIG_USB_GADGET=y
-CONFIG_USB_G_SERIAL=y
+CONFIG_USB_CONFIGFS=y
+CONFIG_USB_CONFIGFS_ACM=y
 
 # Display: DE2 mixer, TCON, MIPI-DSI and D-PHY (on by default with DRM_SUN4I), the panel driver
 # (HX8394 plus the SK-18 entry) comes from patches/linux/0001, the backlight is hardware PWM channel 3 (patches/linux/0003).

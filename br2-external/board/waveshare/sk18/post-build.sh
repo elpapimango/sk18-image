@@ -28,7 +28,10 @@ sed -e "s/%LINUXIMAGE%/$(linux_image)/g" \
 
 sed "s/%PARTUUID%/${PARTUUID}/g" "${BOARD}/genimage.cfg" > "${BINARIES_DIR}/genimage.cfg"
 
-# A second login on the USB serial gadget (ttyGS0) next to the UART console.
-if ! grep -q '^ttyGS0::' "${TARGET_DIR}/etc/inittab"; then
-	echo 'ttyGS0::respawn:/sbin/getty -L ttyGS0 115200 vt100 # USB gadget console' >> "${TARGET_DIR}/etc/inittab"
+# A second login on the USB gadget's second serial port (ttyGS1; the first, ttyGS0, carries the deck protocol)
+# next to the UART console. An older build may have left a getty on ttyGS0 in the target tree: it must go, or it
+# would answer on the protocol port.
+sed -i '/^ttyGS0::/d' "${TARGET_DIR}/etc/inittab"
+if ! grep -q '^ttyGS1::' "${TARGET_DIR}/etc/inittab"; then
+	echo 'ttyGS1::respawn:/sbin/getty -L ttyGS1 115200 vt100 # USB gadget console' >> "${TARGET_DIR}/etc/inittab"
 fi

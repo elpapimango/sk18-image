@@ -77,6 +77,14 @@ BR2_PACKAGE_WPA_SUPPLICANT_CTRL_IFACE=y
 BR2_PACKAGE_WPA_SUPPLICANT_PASSPHRASE=y
 BR2_PACKAGE_IW=y
 
+# mDNS: the board is sk18.local; Avahi announces it and nss-mdns resolves .local names (homeassistant.local).
+# No D-Bus (Avahi runs standalone) and no IPv4LL daemon (the network is DHCP).
+BR2_TARGET_GENERIC_HOSTNAME="sk18"
+BR2_PACKAGE_AVAHI=y
+BR2_PACKAGE_AVAHI_DAEMON=y
+# BR2_PACKAGE_AVAHI_AUTOIPD is not set
+BR2_PACKAGE_NSS_MDNS=y
+
 # On-device client (client/ in this repository)
 BR2_PACKAGE_SK18_KEYS=y
 

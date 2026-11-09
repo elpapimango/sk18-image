@@ -193,9 +193,9 @@ mod tests {
         let rects = panel["rects"].as_array().unwrap();
         assert_eq!(rects.len(), 18);
         // the first, a middle and the last key rectangle (158 px squares, pitch 218 px)
-        assert_eq!(rects[0], json!({"col":0,"row":0,"isKey":true,"x":75,"y":13,"width":158,"height":158}));
-        assert_eq!(rects[7], json!({"col":1,"row":2,"isKey":true,"x":293,"y":449,"width":158,"height":158}));
-        assert_eq!(rects[17], json!({"col":2,"row":5,"isKey":true,"x":511,"y":1103,"width":158,"height":158}));
+        assert_eq!(rects[0], json!({"col":0,"row":0,"isKey":true,"x":61,"y":20,"width":158,"height":158}));
+        assert_eq!(rects[7], json!({"col":1,"row":2,"isKey":true,"x":279,"y":456,"width":158,"height":158}));
+        assert_eq!(rects[17], json!({"col":2,"row":5,"isKey":true,"x":497,"y":1110,"width":158,"height":158}));
     }
 
     #[test]

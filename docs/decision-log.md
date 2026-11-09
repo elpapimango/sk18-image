@@ -297,3 +297,10 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - Causes ruled out: Wi-Fi (dongle detached, still bad), display scan-out (blanked, still bad), a second daemon (found once, only after my own restart), CPU frequency (no cpufreq), packet size or timing from the host (identical URB pattern from Python and gateway), forcing full speed (`sunxi-musb does not have testmode`; configfs `max_speed` below high-speed is refused by `musb_gadget_start`).
 - Hypothesis being tested: u_serial queues only 16 one-packet requests; a 58 KB frame is ~114 back-to-back packets, so the queue runs dry in every burst and the controller driver's "no request, interrupt consumed" path loses or strands packets. Kernel patch 0004 raises `QUEUE_SIZE` to 256.
 - Note for the init script: `S90sk18-link stop` does not stop a running daemon (a restart started a second one, and two readers split the data). Fix before shipping.
+
+## D-038 — Key origin calibrated by eye with an interactive grid (2026-11-09)
+
+- Photographs (D-036) were too coarse to read the offset. Instead a grid was shown on the panel (red 170 px window outline, white 158 px key square and a green cross per key, at a chosen origin) and the user said which way to nudge it, as seen with the cable up, until it looked centred in every key.
+- Result: the key squares start at native x = 61, y = 20 (pitch 218, square 158). In the user's words, "left/right" moves the native y origin (right = +y) and "up/down" the native x origin (up = -x, down = +x). `sk18-keys::layout` now holds 61 and 20; `getInfo` and the boot animation follow.
+- The tool that drew it: `work/calib.ps1 -Ox N -Oy N` (needs the gateway stopped). The user would like the controldeck web UI to offer the same adjustment: a per-device offset for the SK-18 with nudge buttons and a test pattern (idea recorded, not built).
+- Also fixed: `S90sk18-link stop` did not stop a running daemon (the pid file held the shell's PID) and `start` could start a second one; stop now uses `killall` and start refuses to run twice.

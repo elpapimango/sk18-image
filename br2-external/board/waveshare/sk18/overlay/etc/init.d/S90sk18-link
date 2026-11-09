@@ -3,27 +3,27 @@
 # picture from the host cannot overwrite the animation. Its log is /tmp/sk18-link.log (the file is gone after a
 # reboot); it reconnects by itself when the host goes away.
 DAEMON=/usr/bin/sk18-link
-PIDFILE=/run/sk18-link.pid
 LOG=/tmp/sk18-link.log
 
 case "$1" in
 	start)
+		# two daemons on the port would split the host's data between them and corrupt every frame
+		pidof sk18-link > /dev/null && exit 0
 		(
 			i=0
 			while pidof sk18-splash > /dev/null && [ "$i" -lt 100 ]; do
 				sleep 0.2
 				i=$((i + 1))
 			done
-			echo $$ > "$PIDFILE"
 			exec "$DAEMON" --verbose >> "$LOG" 2>&1
 		) > /dev/null 2>&1 &
 		;;
 	stop)
-		[ -f "$PIDFILE" ] && kill "$(cat "$PIDFILE")" 2> /dev/null
-		rm -f "$PIDFILE"
+		killall sk18-link 2> /dev/null
 		;;
 	restart)
 		"$0" stop
+		sleep 1
 		"$0" start
 		;;
 	*)

@@ -1,9 +1,9 @@
 //! Where the 18 key windows are on the panel, in native (portrait, 720 x 1280) pixels.
 //!
-//! The stock firmware reports keys of 158 px at x = 63 + 218 * col, y = 10 + 218 * row. Photographs of a ruler
-//! pattern (decision D-036) show the glass windows are centred about 12 px further along native x and 3 px further
-//! along native y than that, and about 170 px wide. This firmware reports and draws the measured positions, so a
-//! picture's key lands in the middle of its window.
+//! The stock firmware reports keys of 158 px at x = 63 + 218 * col, y = 10 + 218 * row. The glass windows are not
+//! exactly there. The origin below was set by eye with a calibration grid on the real panel (decision D-038): the
+//! user said which way to nudge it until every key square sat in the middle of its window. This firmware reports and
+//! draws these positions, so a picture's key lands in the middle of its window.
 
 /// Key columns in the native (portrait) buffer.
 pub const COLS: usize = 3;
@@ -14,9 +14,9 @@ pub const PITCH: usize = 218;
 /// Side of the square the host draws for one key.
 pub const KEY_SIZE: usize = 158;
 /// Left edge of the first key's square.
-pub const ORIGIN_X: usize = 63 + 12;
+pub const ORIGIN_X: usize = 61;
 /// Top edge of the first key's square.
-pub const ORIGIN_Y: usize = 10 + 3;
+pub const ORIGIN_Y: usize = 20;
 /// Side of the visible part of a key's glass (a little more than the square).
 pub const WINDOW: usize = 170;
 
@@ -47,7 +47,7 @@ mod tests {
 
     #[test]
     fn the_first_and_last_centres() {
-        assert_eq!(key_centre(0, 0), (154, 92));
-        assert_eq!(key_centre(2, 5), (154 + 436, 92 + 1090));
+        assert_eq!(key_centre(0, 0), (140, 99));
+        assert_eq!(key_centre(2, 5), (140 + 436, 99 + 1090));
     }
 }

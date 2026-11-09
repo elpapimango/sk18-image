@@ -22,4 +22,4 @@ zune-jpeg = "0.4"
 zune-core = "0.4"
 
 [target.'cfg(unix)'.dependencies]
-rustix = { version = "1", default-features = false, features = ["std", "fs", "termios"] }
+rustix = { version = "1", default-features = false, features = ["std", "fs", "termios", "event", "time"] }

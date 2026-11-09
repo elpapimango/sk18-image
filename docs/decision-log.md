@@ -304,3 +304,7 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - Result: the key squares start at native x = 61, y = 20 (pitch 218, square 158). In the user's words, "left/right" moves the native y origin (right = +y) and "up/down" the native x origin (up = -x, down = +x). `sk18-keys::layout` now holds 61 and 20; `getInfo` and the boot animation follow.
 - The tool that drew it: `work/calib.ps1 -Ox N -Oy N` (needs the gateway stopped). The user would like the controldeck web UI to offer the same adjustment: a per-device offset for the SK-18 with nudge buttons and a test pattern (idea recorded, not built).
 - Also fixed: `S90sk18-link stop` did not stop a running daemon (the pid file held the shell's PID) and `start` could start a second one; stop now uses `killall` and start refuses to run twice.
+
+### D-037 update 3 — queue depth 1024 (2026-11-09)
+
+- With `QUEUE_SIZE` 256 the receive path was clean (no ack warnings, OpenDeck images and the clock key updating). The user asked for more headroom, so patch 0004 now sets 1024: 512 KB of queue per port, more than the largest frame the host can send (a busy 720x1280 JPEG is up to ~375 KB, about 730 packets; the daemon's limit is 2 MiB). Memory cost is under 1 MB per port. To be checked on the board: no warnings with the new image.

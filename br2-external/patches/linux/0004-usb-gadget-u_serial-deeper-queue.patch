@@ -1,5 +1,5 @@
 From: SK-18 open firmware <noreply@example.invalid>
-Subject: [PATCH] usb: gadget: u_serial: queue 256 packets instead of 16
+Subject: [PATCH] usb: gadget: u_serial: queue 1024 packets instead of 16
 
 On the Allwinner T113 (sunxi musb, PIO) a host that writes a 58 KB frame
 sends about 114 back-to-back 512-byte packets. u_serial queues only 16
@@ -7,7 +7,8 @@ receive requests of one packet each, so the queue runs dry inside every
 burst. The controller driver then has a packet pending in its FIFO with
 no request to put it in and its interrupt already consumed, and packets
 go missing (whole 512-byte blocks) or the endpoint stalls until something
-queues a request again. Queueing 256 packets (128 KB per port) keeps the
+queues a request again. Queueing 1024 packets (512 KB per port, more than the largest frame the
+host sends) keeps the
 queue from running dry during a burst.
 
 ---
@@ -18,7 +19,7 @@ queue from running dry during a burst.
   * consider it a NOP.  A third layer is provided by the TTY code.
   */
 -#define QUEUE_SIZE		16
-+#define QUEUE_SIZE		256
++#define QUEUE_SIZE		1024
  #define WRITE_BUF_SIZE		8192		/* TX only */
  #define GS_CONSOLE_BUF_SIZE	8192
  

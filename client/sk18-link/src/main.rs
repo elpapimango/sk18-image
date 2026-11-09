@@ -117,20 +117,38 @@ mod run {
 
             let mut decoder = FrameDecoder::new();
             let mut buf = vec![0u8; 64 * 1024];
+            // Counters for the verbose log: what the read loop is doing (decision D-037).
+            let (mut polls, mut timeouts, mut reads, mut bytes, mut waiting_hits, mut flushes) = (0u64, 0u64, 0u64, 0u64, 0u64, 0u64);
+            let mut last_stats = std::time::Instant::now();
             loop {
+                if o.verbose && last_stats.elapsed() >= Duration::from_secs(2) {
+                    last_stats = std::time::Instant::now();
+                    eprintln!(
+                        "sk18-link: [{} ms] stats: polls {polls} timeouts {timeouts} reads {reads} bytes {bytes} waiting_hits {waiting_hits} flushes {flushes} buffered {} dropped {}",
+                        ms(),
+                        decoder.buffered(),
+                        decoder.dropped()
+                    );
+                }
+                polls += 1;
                 // If the kernel does not wake us for data it holds, find it here (see `recover`).
                 match wait_readable(&port, 20) {
                     Ok(true) => {}
                     Ok(false) => {
+                        timeouts += 1;
                         if !recover(&port) {
+                            flushes += 1;
                             continue;
                         }
+                        waiting_hits += 1;
                     }
                     Err(_) => break,
                 }
                 match port.read(&mut buf) {
                     Ok(0) | Err(_) => break,
                     Ok(n) => {
+                        reads += 1;
+                        bytes += n as u64;
                         decoder.push(&buf[..n]);
                         while let Some(frame) = decoder.next_frame() {
                             if o.verbose {

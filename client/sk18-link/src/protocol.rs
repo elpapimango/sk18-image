@@ -18,7 +18,7 @@ const PREFIX_LEN: usize = 20;
 /// Bytes a frame adds around its data.
 pub const FRAME_OVERHEAD: usize = PREFIX_LEN + 4;
 /// Largest `data` accepted; a bigger size is treated as line noise.
-pub const MAX_DATA_LEN: usize = 8 * 1024 * 1024;
+pub const MAX_DATA_LEN: usize = 2 * 1024 * 1024;
 
 const fn crc_table() -> [u32; 256] {
     let mut table = [0u32; 256];
@@ -116,6 +116,11 @@ impl FrameDecoder {
     }
 
     /// The next complete, valid frame, or `None` when more bytes are needed.
+    /// Bytes held back waiting for the rest of a frame.
+    pub fn buffered(&self) -> usize {
+        self.buffer.len()
+    }
+
     pub fn next_frame(&mut self) -> Option<Frame> {
         loop {
             let Some(start) = find_header(&self.buffer) else {

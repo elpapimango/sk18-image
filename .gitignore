@@ -23,3 +23,6 @@ wpa_supplicant*.conf
 /client/target/
 
 .claude/settings.local.json
+
+# Per-machine Claude Code settings (contain host-specific permission rules)
+.claude/

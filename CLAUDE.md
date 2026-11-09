@@ -2,30 +2,31 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Repository state
+## What this is
 
-The goal is a reproducible mainline-based Buildroot SD image for this device (see `docs/phase2-image-analysis.md` and `docs/decision-log.md`). Tracked content is currently documentation only; there is no build system yet. Work was done in WSL distro `BuildRoot` (`~/buildroot`, extracted partitions in `~/sk18-work/parts`); never write to the original image. The untracked `image/` directory (≈4.7 GB of binary artifacts for a Waveshare SK18 "ScreenKey" / MK-series device). There is no README, lint config, or test suite. Do not `git add` `image/` (multi-GB blobs); keep it untracked or use Git LFS.
+A reproducible, mainline-based Buildroot SD image (U-Boot 2026.10, Linux 7.3.1) for the Waveshare SK-18 "ScreenKey" (Allwinner T113-S3, 720x1280 panel used turned 90° as a 3-row x 6-column key grid), plus the on-device Rust client. The device works as a macro deck with the user's `controldeck-rs` (`C:\Users\mholmert\Workspace\control-deck-rs`, running on the DietPi at 192.168.0.190) and with OpenDeck. Why and how: `docs/decision-log.md` (D-001 onwards, newest last; read the latest entries first), `docs/hardware-status.md`.
 
-`image/` contains:
-- `waveshare_sk18.img` — 4 GB raw disk image of the device (GPT with protective MBR). Treat as read-only; inspect with REA/binary tools rather than mounting or writing to it.
-- `MK Series Upper Computer Open Source_V1.0.zip` — vendor package. Its source is **inside the zip only** (nothing is extracted). Inspect without extracting, e.g. `unzip -l "<zip>"` and `unzip -p "<zip>" "<member>"`. If extraction is needed, extract into the scratchpad, not the repo. Contents:
-  - `OpenSourceLicenseDemo_V1.0/` — Qt (qmake) host-side desktop app, plus a prebuilt `OpenSourceLicenseDemo_V1.0.exe`.
-  - `OpenSourceLicenseFirware_V1.0/MK10_V1.0.img`, `MK20_V1.0.img` — ~850 MB firmware images for two device variants, and `PhoenixCardv4.2.7.7z.7z` (PhoenixCard, Allwinner SD-card flashing tool).
+Working rules that have held throughout: evidence first, record every decision in the decision log, commit in git, never modify the original image or card, positively identify an SD target before writing, no proprietary binaries, credentials or large images in git, pin versions, quote paths.
 
-## Host app (inside the zip): build and run
+## Layout
 
-Qt project with `QT += core gui serialport widgets`, `CONFIG += c++17`. Build from an extracted copy:
+- `br2-external/`: Buildroot external tree (`configs/waveshare_sk18_defconfig`, `board/waveshare/sk18/` with DTS, kernel/U-Boot fragments, `overlay/` init scripts and udev rules, `patches/linux/*.patch`, packages `sk18-keys`, `sk18-link`, `sk18-splash`, `sk18-wifi-firmware`).
+- `client/`: Cargo workspace for the board (`sk18-keys` UART1 key decoder and shared key geometry, `sk18-link` daemon that speaks the stock deck serial protocol to the host over the USB gadget, `sk18-splash` boot animation). `Cargo.lock` is committed; the serial code is Unix only.
+- `tools/flash/`: `flash-sdcard.sh <sha256>` (guarded flasher, runs on the DietPi; add each new image's ext4 PARTUUID to its KNOWN list), `provision-wifi.sh`.
+- `docs/`: decision log, hardware status, protocol notes (`stock-serial-protocol.md`, `uart1-key-protocol.md`), phase write-ups.
+- `work/`: scratch scripts and built images (git-ignored). `image/`: original card image and vendor zip, git-ignored, read-only, never `git add` it.
 
-```
-qmake OpenSourceLicenseDemo.pro && make        # or open the .pro in Qt Creator
-```
+## Build
 
-It uses `QRegExpValidator`/`QRegExp`, so it targets Qt 5 (or Qt 6 with core5compat). No tests.
+Buildroot lives in WSL distro `BuildRoot` (`~/buildroot`, output `~/sk18-build`). From Windows: `wsl -d BuildRoot bash /mnt/c/Temp/sk18/work/rebuild_all.sh` (dirclean of the three client packages, then make) or `work/rebuild_kernel.sh` (after a kernel patch change); progress in `~/sk18-build/build.status`. The first build needs network (cargo vendor, crates.io). Client crates: `cargo test` and `cargo clippy --all-targets -- -D warnings` in `client/`; the board is 32-bit hard-float Cortex-A7 (`armv7-unknown-linux-gnueabihf`).
 
-## Host ↔ device serial protocol (needs `mainwindow.cpp`, `CRC32.cpp`, `rectwidget.cpp` together)
+## Deploying and testing on hardware
 
-- Transport: USB CDC serial, 115200 8N1, no flow control. `get_ports()` picks the device by USB VID/PID: `1d6b:0104` or `1234:5678`.
-- Framing (little-endian, `packet_cmd_ack` builds / `parse_cmd` parses): `A1 A5 5A 5E` header, `u32 id`, `u32 cmd`, `u32 size`, `u32 crc32(size)`, payload, `u32 crc32(payload)`. `parse_cmd` buffers the stream, resyncs on the header, and drops frames whose size-CRC or payload-CRC fail.
-- `cmd` values (`CMD_VALUE` in `mainwindow.h`): `100` = JPG data (screen/preview image), `101` = JSON, `102` = end. Control is done via JSON messages with a `method` field (e.g. `setFileCRC`) for file list/download/delete, audio start/stop, volume sliders, and key-matrix state.
-- `RectWidget` renders the key/rectangle layout from JSON (`loadFromJson`) and highlights pressed keys (`setKeyPressed`); `CRC32.cpp` is a stepwise `Start_CheckCRC / Calculate_CRC / CheckCRC_Result` API.
-- Received frames are dispatched through `MainWindow::_DataProcessor`, which is where most protocol behavior lives.
+- The board has two USB ACM ports (ttyACM0 = deck protocol, ttyACM1 = getty console) and no network unless Wi-Fi credentials are on the card. Anything that drops the USB gadget (unbinding the UDC) must run as a detached `setsid sh script &`.
+- Images are flashed from the DietPi's card reader; the user swaps the card and replugs. `scp` the image to the DietPi, then `bash flash-sdcard.sh <sha256>`.
+- controldeck-rs is built and tested on the DietPi (`~/control-deck-rs-sk18`; Windows `cargo check` skips the Unix-only gatewayd code), installed as `/usr/local/bin/gatewayd` for the `control-deck-gatewayd` service (keep a timestamped backup, roll back if it does not become active). Its config is `/etc/control-deck/config.toml`.
+- On Windows prefer script files over inline quoting for ssh/scp/PowerShell commands.
+
+## Host app in the vendor zip (reference only)
+
+`image/MK Series Upper Computer Open Source_V1.0.zip` holds the vendor Qt host app and the MK10/MK20 firmware images. Inspect without extracting (`unzip -l`, `unzip -p`); extract only into a scratch directory. Protocol summary (full version in `docs/stock-serial-protocol.md`): USB CDC 115200 8N1, VID/PID `1d6b:0104` or `1234:5678`; frame `A1 A5 5A 5E | u32 id | u32 cmd | u32 size | u32 crc32(size) | payload | u32 crc32(payload)` little endian; cmd 100 = whole-screen JPEG (acknowledged by an empty cmd-100 frame with the same id), 101 = JSON (`method` field: `getInfo`, `setBacklight`, `keyStateChanged`, ...), 102 = end.

@@ -6,7 +6,7 @@ use std::path::Path;
 
 use rustix::fs::{open, Mode, OFlags};
 use rustix::event::{poll, PollFd, PollFlags};
-use rustix::termios::{tcflush, tcgetattr, tcsetattr, ControlModes, OptionalActions, QueueSelector, SpecialCodeIndex};
+use rustix::termios::{tcgetattr, tcsetattr, ControlModes, OptionalActions, SpecialCodeIndex};
 use rustix::time::Timespec;
 
 /// Opens `path` read/write as a raw port: no echo, no newline translation, no flow control, reads return as soon as
@@ -35,17 +35,9 @@ pub fn bytes_waiting(port: &File) -> usize {
     rustix::io::ioctl_fionread(port).map_or(0, |n| usize::try_from(n).unwrap_or(0))
 }
 
-/// Works around two stalls of the receive path of the SK-18's USB serial gadget (decision D-037).
-///
-/// Call it when `poll` timed out. (1) The terminal can hold data without waking the reader (a lost wakeup in the
-/// kernel's line discipline): then the data is simply read, the caller sees `true`. (2) Or the gadget has stayed
-/// throttled although the buffer is empty, so the controller NAKs the host: `tcflush(TCIFLUSH)` ends with an
-/// unconditional `tty_unthrottle()`, which makes the gadget queue receive buffers again. That flush is only done
-/// when nothing is waiting, so no data is thrown away.
-pub fn recover(port: &File) -> bool {
-    if bytes_waiting(port) > 0 {
-        return true;
-    }
-    let _ = tcflush(port, QueueSelector::IFlush);
-    false
+/// Called when `poll` timed out: is there data the terminal holds without having woken us (a lost wakeup in the
+/// kernel's line discipline, decision D-037)? Nothing is ever flushed: an earlier version flushed the input on every
+/// idle poll, which cut holes into frames that were still arriving and made the host's frames fail their CRC.
+pub fn data_waiting(port: &File) -> bool {
+    bytes_waiting(port) > 0
 }

@@ -284,3 +284,9 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - Conclusion: the terminal (n_tty) holds the data but the reader is not woken: a lost wakeup in the kernel's line discipline on this dual-core CPU. My first watchdog (`tcflush` on every idle poll) made it worse, because the flush discarded the very data the reader had not been woken for.
 - Fix: after a 20 ms poll timeout the daemon asks the terminal how many bytes it holds (`FIONREAD`) and reads them; only when the terminal is empty does it `tcflush(TCIFLUSH)` (which also ends in `tty_unthrottle()`, covering a throttled gadget). No data is discarded.
 - Status: to be verified on the board with the gateway running.
+
+### D-037 correction — it was my flush (2026-11-09)
+
+- The read-loop statistics added to the verbose log showed the real cause of the "stalls": the daemon was reading every frame in full (`reads`/`bytes` growing, one 58 KB frame every ~2 s) but the decoder dropped almost every one (`dropped` +1 per frame, `buffered` ~58 KB): each frame failed its data CRC. `flushes` equalled `timeouts`: the idle `tcflush(TCIFLUSH)` ran continuously and cut holes into frames still arriving. The "lost wakeup" and "throttled gadget" theories had no support in that data, and a second reader on the same port received intact frames.
+- Fix: no flush at all. After a poll timeout the daemon only reads data the terminal already holds (`FIONREAD`), which is harmless. The frame size limit is 2 MiB.
+- Lesson: the one-late replies of the first image (no flush) may have a different cause (they were seen with the same `read` loop, blocking); to be re-checked with the statistics before assuming that part is fixed.

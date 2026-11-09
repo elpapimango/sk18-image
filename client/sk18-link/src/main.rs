@@ -25,7 +25,7 @@ mod run {
     use sk18_link::device::{key_event, Device};
     use sk18_link::hw::LinuxHardware;
     use sk18_link::protocol::{Frame, FrameDecoder};
-    use sk18_link::serial::{open_raw, recover, wait_readable};
+    use sk18_link::serial::{data_waiting, open_raw, wait_readable};
 
     pub struct Options {
         pub port: PathBuf,
@@ -118,26 +118,25 @@ mod run {
             let mut decoder = FrameDecoder::new();
             let mut buf = vec![0u8; 64 * 1024];
             // Counters for the verbose log: what the read loop is doing (decision D-037).
-            let (mut polls, mut timeouts, mut reads, mut bytes, mut waiting_hits, mut flushes) = (0u64, 0u64, 0u64, 0u64, 0u64, 0u64);
+            let (mut polls, mut timeouts, mut reads, mut bytes, mut waiting_hits) = (0u64, 0u64, 0u64, 0u64, 0u64);
             let mut last_stats = std::time::Instant::now();
             loop {
                 if o.verbose && last_stats.elapsed() >= Duration::from_secs(2) {
                     last_stats = std::time::Instant::now();
                     eprintln!(
-                        "sk18-link: [{} ms] stats: polls {polls} timeouts {timeouts} reads {reads} bytes {bytes} waiting_hits {waiting_hits} flushes {flushes} buffered {} dropped {}",
+                        "sk18-link: [{} ms] stats: polls {polls} timeouts {timeouts} reads {reads} bytes {bytes} waiting_hits {waiting_hits} buffered {} dropped {}",
                         ms(),
                         decoder.buffered(),
                         decoder.dropped()
                     );
                 }
                 polls += 1;
-                // If the kernel does not wake us for data it holds, find it here (see `recover`).
+                // If the kernel does not wake us for data it holds, find it here (see `data_waiting`).
                 match wait_readable(&port, 20) {
                     Ok(true) => {}
                     Ok(false) => {
                         timeouts += 1;
-                        if !recover(&port) {
-                            flushes += 1;
+                        if !data_waiting(&port) {
                             continue;
                         }
                         waiting_hits += 1;

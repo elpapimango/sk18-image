@@ -82,3 +82,21 @@ Whether the device has physical buttons that produce events, the valid range and
 `setBacklight`, behaviour when the host stops sending frames (does the stock UI come back, and
 when?), and how long a frame takes to reach the screen (latency).
 
+## Device settings (open-source firmware only, `sk18-link`; not in the stock firmware)
+
+Extra JSON methods so that the host can set up the device over the USB link. Requests are `{"method": ..., "parameters": ...}`; the answer is
+the usual `{"ack_method": ..., "success": ..., "result": ... | "errorString": ...}`. The stock firmware answers them with an error (or not at all),
+which is how a host tells the two firmwares apart.
+
+| Method | Parameters | Result |
+|---|---|---|
+| `getSettings` | none | `{"wifi": {...}, "home_assistant": {...}}` |
+| `setWifi` | `ssid`, `passphrase` (optional for the same network), `country`, `hidden` | like `getSettings` |
+| `clearWifi` | none | like `getSettings` |
+| `setHomeAssistant` | `enabled`, `url`, `event`, `token` (optional), `clear_token` | like `getSettings` |
+| `testHomeAssistant` | `url`, `token` (both optional; the stored values fill in) | `{"message": "API running. (12 ms)"}` or an error text |
+
+`wifi`: `{"configured", "ssid", "country", "hidden", "state"}` and, once connected, `"ip"` and `"signal_dbm"`; `state` is `connected`, `getting-address`,
+`connecting`, `disconnected`, `not-running`, `no-adapter` or `not-configured`. `home_assistant`: `{"enabled", "url", "event", "token_set"}`. The Wi-Fi key
+and the token are never reported. `testHomeAssistant` blocks the link for up to about 8 seconds (connection and read timeouts of 4 s each), so a host
+should allow 10 s for the answer.

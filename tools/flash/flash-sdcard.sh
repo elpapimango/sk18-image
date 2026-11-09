@@ -53,21 +53,25 @@ NPART=$(lsblk -no TYPE "$DEV" | grep -c part)
 if [ "$KIND" = "blank or factory-formatted" ] && [ "$NPART" -gt 1 ]; then die "unknown content: $NPART partitions, none of them ours"; fi
 echo "card content: $KIND"
 
-# Wi-Fi credentials already on this card (from provision-wifi.sh) are carried over to the new image, so that
-# reflashing does not mean typing the passphrase again. They are held in a private temporary file on this machine
-# only for the duration of the flash and removed afterwards.
-KEEP=""
-trap '[ -z "$KEEP" ] || rm -f "$KEEP"' EXIT
+# Secrets the device keeps on its card (the Wi-Fi network from provision-wifi.sh or the controldeck settings page, and
+# the Home Assistant access) are carried over to the new image, so that reflashing does not mean typing them again.
+# They are held in a private temporary directory on this machine only for the duration of the flash and removed
+# afterwards.
+KEEP_FILES="etc/wpa_supplicant.conf etc/sk18-home-assistant.json"
+KEEPDIR=""
+trap '[ -z "$KEEPDIR" ] || rm -rf "$KEEPDIR"' EXIT
 if [ "$KIND" != "blank or factory-formatted" ]; then
   sudo mkdir -p /mnt/sk18p1
   if sudo mount -t ext4 -o ro "${DEV}1" /mnt/sk18p1 2>/dev/null; then
-    if sudo grep -q '^network=' /mnt/sk18p1/etc/wpa_supplicant.conf 2>/dev/null; then
-      KEEP=$(mktemp); chmod 600 "$KEEP"
-      sudo cat /mnt/sk18p1/etc/wpa_supplicant.conf | tee "$KEEP" > /dev/null
-      echo "Wi-Fi credentials found on the card: they will be copied to the new image"
-    else
-      echo "no Wi-Fi credentials on the card (run provision-wifi.sh after flashing)"
-    fi
+    KEEPDIR=$(mktemp -d); chmod 700 "$KEEPDIR"
+    for f in $KEEP_FILES; do
+      if sudo test -s "/mnt/sk18p1/$f"; then
+        sudo cat "/mnt/sk18p1/$f" | tee "$KEEPDIR/$(basename "$f")" > /dev/null
+        chmod 600 "$KEEPDIR/$(basename "$f")"
+        echo "found on the card, will be copied to the new image: /$f"
+      fi
+    done
+    [ -s "$KEEPDIR/wpa_supplicant.conf" ] || echo "no Wi-Fi network on the card (set it on the Settings page of the device in controldeck, or run provision-wifi.sh)"
     sudo umount /mnt/sk18p1
   fi
 fi
@@ -81,12 +85,16 @@ echo "card  : $READ_SHA"
 if [ "$READ_SHA" = "$WANT_SHA" ]; then echo "VERIFIED: the card matches the image"; else die "READ-BACK MISMATCH"; fi
 sudo partprobe "$DEV" 2>/dev/null; sleep 1
 lsblk -o NAME,SIZE,FSTYPE,PARTUUID "$DEV"
-if [ -n "$KEEP" ]; then
+if [ -n "$KEEPDIR" ] && [ -n "$(ls -A "$KEEPDIR")" ]; then
   # This changes the card after the read-back check above: the check covers the image as written, and the only
-  # difference afterwards is this one file.
-  sudo mount -t ext4 -o rw "${DEV}1" /mnt/sk18p1 || die "cannot mount the new image to restore the Wi-Fi credentials"
-  sudo install -m 0600 -o root -g root "$KEEP" /mnt/sk18p1/etc/wpa_supplicant.conf
+  # difference afterwards is these files.
+  sudo mount -t ext4 -o rw "${DEV}1" /mnt/sk18p1 || die "cannot mount the new image to restore the settings"
+  for f in $KEEP_FILES; do
+    if [ -s "$KEEPDIR/$(basename "$f")" ]; then
+      sudo install -m 0600 -o root -g root "$KEEPDIR/$(basename "$f")" "/mnt/sk18p1/$f"
+      echo "restored on the new image (mode 0600): /$f"
+    fi
+  done
   sync
   sudo umount /mnt/sk18p1
-  echo "Wi-Fi credentials restored on the new image (mode 0600)"
 fi

@@ -21,3 +21,5 @@ wpa_supplicant*.conf
 
 # Rust build output of the on-device client
 /client/target/
+
+.claude/settings.local.json

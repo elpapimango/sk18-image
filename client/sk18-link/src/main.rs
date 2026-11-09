@@ -21,11 +21,13 @@ mod run {
     use std::thread;
     use std::time::Duration;
 
-    use sk18_keys::{Decoder as KeyDecoder, Frame as KeyFrame};
+    use sk18_keys::{Decoder as KeyDecoder, Frame as KeyFrame, Orientation};
     use sk18_link::device::{key_event, Device};
+    use sk18_link::ha::{Notifier, SharedHa};
     use sk18_link::hw::LinuxHardware;
     use sk18_link::protocol::{Frame, FrameDecoder};
     use sk18_link::serial::{data_waiting, open_raw, wait_readable};
+    use sk18_link::settings::{LinuxSystem, SystemSettings, HA_CONF, WPA_CONF};
 
     pub struct Options {
         pub port: PathBuf,
@@ -59,7 +61,7 @@ mod run {
     }
 
     /// Reports every key press and release from the UART1 controller to the host (when there is one).
-    fn key_thread(keys: PathBuf, link: Link, verbose: bool) {
+    fn key_thread(keys: PathBuf, link: Link, notifier: Notifier, verbose: bool) {
         loop {
             match sk18_keys::port::open_port(&keys) {
                 Ok(mut port) => {
@@ -75,6 +77,10 @@ mod run {
                                     eprintln!("sk18-link: key ({}, {}) {}", k.row, k.col, if k.pressed { "down" } else { "up" });
                                 }
                                 send(&link, &key_event(k.row, k.col, k.pressed), verbose);
+                                // Home Assistant hears about the key as the viewer counts it (3 rows by 6 columns).
+                                if let Some((row, col)) = Orientation::Cw90.to_logical(k.row, k.col) {
+                                    notifier.key(row + 1, col + 1, k.pressed);
+                                }
                             }
                         });
                     }
@@ -87,12 +93,14 @@ mod run {
 
     pub fn main(o: Options) -> Result<(), String> {
         let hw = LinuxHardware::open(&o.fb, &o.backlight, o.verbose)?;
-        let mut device = Device::new(hw);
+        let ha = SharedHa::default();
+        let mut device = Device::new(hw).with_settings(Box::new(SystemSettings::new(LinuxSystem, WPA_CONF, HA_CONF, ha.clone())));
+        let notifier = Notifier::spawn(ha);
         let link: Link = Arc::new(Mutex::new(None));
 
         {
             let (keys, link, verbose) = (o.keys.clone(), link.clone(), o.verbose);
-            thread::spawn(move || key_thread(keys, link, verbose));
+            thread::spawn(move || key_thread(keys, link, notifier, verbose));
         }
 
         let mut waiting_reported = false;

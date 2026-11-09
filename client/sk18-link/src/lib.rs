@@ -6,7 +6,9 @@
 
 pub mod device;
 pub mod display;
+pub mod ha;
 pub mod protocol;
+pub mod settings;
 #[cfg(unix)]
 pub mod hw;
 #[cfg(unix)]

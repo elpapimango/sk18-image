@@ -9,11 +9,14 @@
 //!    host's cue to send the next image. It is sent even if the image could not be shown, so a bad frame never
 //!    stalls the host.
 //!  - key presses are sent as `keyStateChanged` events.
+//!  - `getSettings`, `setWifi`, `clearWifi`, `setHomeAssistant` and `testHomeAssistant` are the device's own settings
+//!    (see [`crate::settings`]); without a settings backend they get the same polite error as the stock methods.
 //!  - the stock methods this firmware does not implement (audio, typing, file management) get a polite error.
 
 use serde_json::{json, Value};
 
 use crate::protocol::{Frame, CMD_JSON, CMD_SHOW_JPG};
+use crate::settings::Settings;
 
 /// Model name the host driver checks for (it must start with `SK18`).
 pub const MODEL: &str = "SK18";
@@ -39,6 +42,7 @@ pub trait Hardware {
 /// The protocol state machine.
 pub struct Device<H> {
     hw: H,
+    settings: Option<Box<dyn Settings + Send>>,
     shown: u64,
     failed: u64,
 }
@@ -80,7 +84,14 @@ fn nack(id: u32, method: &str, error: &str) -> Frame {
 impl<H: Hardware> Device<H> {
     /// A device on top of `hw`.
     pub fn new(hw: H) -> Self {
-        Self { hw, shown: 0, failed: 0 }
+        Self { hw, settings: None, shown: 0, failed: 0 }
+    }
+
+    /// Lets the host read and change the device's settings (Wi-Fi, Home Assistant).
+    #[must_use]
+    pub fn with_settings(mut self, settings: Box<dyn Settings + Send>) -> Self {
+        self.settings = Some(settings);
+        self
     }
 
     /// The hardware, for inspection in tests.
@@ -131,7 +142,11 @@ impl<H: Hardware> Device<H> {
                 }
                 None => nack(frame.id, method, "missing integer parameter \"level\""),
             },
-            other => nack(frame.id, other, "not supported by this firmware"),
+            other => match self.settings.as_mut().and_then(|s| s.call(other, &params)) {
+                Some(Ok(result)) => ack(frame.id, other, result),
+                Some(Err(e)) => nack(frame.id, other, &e),
+                None => nack(frame.id, other, "not supported by this firmware"),
+            },
         };
         vec![reply]
     }
@@ -245,6 +260,33 @@ mod tests {
         let out = d.handle(&request(3, json!({ "method": "setBacklight", "parameters": { "level": 50 } })));
         let v = json_of(&out[0]);
         assert_eq!((v["success"].as_bool(), v["errorString"].as_str()), (Some(false), Some("no backlight")));
+    }
+
+    struct FakeSettings;
+
+    impl Settings for FakeSettings {
+        fn call(&mut self, method: &str, params: &Value) -> Option<Result<Value, String>> {
+            match method {
+                "getSettings" => Some(Ok(json!({ "echo": params }))),
+                "setWifi" => Some(Err("nope".into())),
+                _ => None,
+            }
+        }
+    }
+
+    #[test]
+    fn settings_methods_go_to_the_settings_backend_when_there_is_one() {
+        let mut d = Device::new(Fake::default()).with_settings(Box::new(FakeSettings));
+        let v = json_of(&d.handle(&request(4, json!({ "method": "getSettings", "parameters": { "a": 1 } })))[0]);
+        assert_eq!((v["ack_method"].as_str(), v["success"].as_bool(), &v["result"]["echo"]["a"]), (Some("getSettings"), Some(true), &json!(1)));
+        let v = json_of(&d.handle(&request(5, json!({ "method": "setWifi", "parameters": {} })))[0]);
+        assert_eq!((v["success"].as_bool(), v["errorString"].as_str()), (Some(false), Some("nope")));
+        // something that is not a setting is still refused politely, and so are settings without a backend
+        let v = json_of(&d.handle(&request(6, json!({ "method": "playAudio" })))[0]);
+        assert_eq!(v["success"], false);
+        let mut plain = Device::new(Fake::default());
+        let v = json_of(&plain.handle(&request(7, json!({ "method": "getSettings" })))[0]);
+        assert_eq!(v["success"], false);
     }
 
     #[test]

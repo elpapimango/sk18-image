@@ -30,13 +30,22 @@ pub fn wait_readable(port: &File, ms: i64) -> io::Result<bool> {
     Ok(poll(&mut fds, Some(&timeout))? > 0)
 }
 
-/// Releases a receive path the kernel has throttled for good.
+/// Bytes the terminal already holds for reading.
+pub fn bytes_waiting(port: &File) -> usize {
+    rustix::io::ioctl_fionread(port).map_or(0, |n| usize::try_from(n).unwrap_or(0))
+}
+
+/// Works around two stalls of the receive path of the SK-18's USB serial gadget (decision D-037).
 ///
-/// On the SK-18 the USB serial gadget (u_serial on the sunxi musb controller) sometimes stays throttled after a
-/// burst although the terminal's buffer is empty: the controller then holds the host's last packet in its FIFO
-/// and NAKs, so a frame, or the end of one, only arrives when something else wakes the path (decision D-037).
-/// `tcflush(TCIFLUSH)` ends with an unconditional `tty_unthrottle()`, which makes the gadget queue receive buffers
-/// again. Call this only while nothing is readable: the terminal's buffer is then empty and nothing is lost.
-pub fn unthrottle(port: &File) {
+/// Call it when `poll` timed out. (1) The terminal can hold data without waking the reader (a lost wakeup in the
+/// kernel's line discipline): then the data is simply read, the caller sees `true`. (2) Or the gadget has stayed
+/// throttled although the buffer is empty, so the controller NAKs the host: `tcflush(TCIFLUSH)` ends with an
+/// unconditional `tty_unthrottle()`, which makes the gadget queue receive buffers again. That flush is only done
+/// when nothing is waiting, so no data is thrown away.
+pub fn recover(port: &File) -> bool {
+    if bytes_waiting(port) > 0 {
+        return true;
+    }
     let _ = tcflush(port, QueueSelector::IFlush);
+    false
 }

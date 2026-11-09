@@ -277,3 +277,10 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - Observed on the board with image 64761ec4…: for roughly the first 15 minutes after boot many frames got no `cmd 100` ack at the host (gateway warned "no frame acknowledgement, sending anyway", each costing 1.5 s; a Python driver-like loop lost 18 to 40 of 40). The board's trace showed every frame it did receive was acked ~100 ms later with the write returning at once; the lost frames never appeared in the board's log. No USB errors on the host or in the board's dmesg.
 - Later the same test acked 18 of 18 at 127 ms and the gateway logged no warning for minutes.
 - Not explained. Next step if it recurs: compare the host's and the board's frame counters, look at what runs on the board early after boot (wpa_supplicant without credentials, avahi). The daemon keeps the timestamped trace in `--verbose` mode.
+
+### D-037 update — cause and fix of the receive stalls (2026-11-09)
+
+- Evidence: during a stall the daemon was alive (polling every 30 ms), the board's USB controller kept taking about 64 interrupts a second (matching the host's 58 KB frames every 1.6 s), the host's usbmon showed every OUT transfer accepted, and yet no frame reached the daemon. Earlier runs showed replies arriving one request late and `getInfo` answers appearing only when a later large transfer arrived. A single ACM function (console removed) stalled just the same.
+- Conclusion: the terminal (n_tty) holds the data but the reader is not woken: a lost wakeup in the kernel's line discipline on this dual-core CPU. My first watchdog (`tcflush` on every idle poll) made it worse, because the flush discarded the very data the reader had not been woken for.
+- Fix: after a 20 ms poll timeout the daemon asks the terminal how many bytes it holds (`FIONREAD`) and reads them; only when the terminal is empty does it `tcflush(TCIFLUSH)` (which also ends in `tty_unthrottle()`, covering a throttled gadget). No data is discarded.
+- Status: to be verified on the board with the gateway running.

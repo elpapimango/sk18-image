@@ -25,7 +25,7 @@ mod run {
     use sk18_link::device::{key_event, Device};
     use sk18_link::hw::LinuxHardware;
     use sk18_link::protocol::{Frame, FrameDecoder};
-    use sk18_link::serial::{open_raw, unthrottle, wait_readable};
+    use sk18_link::serial::{open_raw, recover, wait_readable};
 
     pub struct Options {
         pub port: PathBuf,
@@ -118,12 +118,13 @@ mod run {
             let mut decoder = FrameDecoder::new();
             let mut buf = vec![0u8; 64 * 1024];
             loop {
-                // While nothing arrives, keep the receive path from staying throttled (see `unthrottle`).
-                match wait_readable(&port, 30) {
+                // If the kernel does not wake us for data it holds, find it here (see `recover`).
+                match wait_readable(&port, 20) {
                     Ok(true) => {}
                     Ok(false) => {
-                        unthrottle(&port);
-                        continue;
+                        if !recover(&port) {
+                            continue;
+                        }
                     }
                     Err(_) => break,
                 }

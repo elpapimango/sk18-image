@@ -149,13 +149,25 @@ mod run {
                         reads += 1;
                         bytes += n as u64;
                         decoder.push(&buf[..n]);
-                        while let Some(frame) = decoder.next_frame() {
+                        let frame_or_none = decoder.next_frame();
+                        if o.verbose {
+                            if let Some(why) = decoder.take_last_drop() {
+                                eprintln!("sk18-link: [{} ms] dropped: {why}", ms());
+                            }
+                            if let Some(bad) = decoder.take_bad_frame() {
+                                let _ = std::fs::write("/tmp/bad-frame.bin", &bad);
+                                eprintln!("sk18-link: [{} ms] wrote /tmp/bad-frame.bin ({} bytes)", ms(), bad.len());
+                            }
+                        }
+                        let mut next = frame_or_none;
+                        while let Some(frame) = next.take() {
                             if o.verbose {
                                 eprintln!("sk18-link: [{} ms] frame id {} cmd {} ({} bytes) received", ms(), frame.id, frame.cmd, frame.data.len());
                             }
                             for reply in device.handle(&frame) {
                                 send(&link, &reply, o.verbose);
                             }
+                            next = decoder.next_frame();
                         }
                     }
                 }

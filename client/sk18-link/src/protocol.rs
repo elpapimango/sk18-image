@@ -89,6 +89,9 @@ impl Frame {
 pub struct FrameDecoder {
     buffer: Vec<u8>,
     dropped: u64,
+    /// What the last dropped candidate looked like (for the verbose log), and the bytes of the first bad data CRC.
+    last_drop: Option<String>,
+    bad_frame: Option<Vec<u8>>,
 }
 
 fn find_header(data: &[u8]) -> Option<usize> {
@@ -115,12 +118,22 @@ impl FrameDecoder {
         self.dropped
     }
 
-    /// The next complete, valid frame, or `None` when more bytes are needed.
     /// Bytes held back waiting for the rest of a frame.
     pub fn buffered(&self) -> usize {
         self.buffer.len()
     }
 
+    /// Takes the description of the last drop, if any happened since the last call.
+    pub fn take_last_drop(&mut self) -> Option<String> {
+        self.last_drop.take()
+    }
+
+    /// Takes the whole bytes of the first frame whose data CRC was wrong (header, data and CRC).
+    pub fn take_bad_frame(&mut self) -> Option<Vec<u8>> {
+        self.bad_frame.take()
+    }
+
+    /// The next complete, valid frame, or `None` when more bytes are needed.
     pub fn next_frame(&mut self) -> Option<Frame> {
         loop {
             let Some(start) = find_header(&self.buffer) else {
@@ -142,6 +155,13 @@ impl FrameDecoder {
             if u32_at(&self.buffer, 16) != crc32(size_bytes) || size > MAX_DATA_LEN {
                 // Not a frame: skip this header and look for the next one.
                 self.dropped += 1;
+                self.last_drop = Some(format!(
+                    "header with bad size crc or size: id {} size {} crc {:08x} want {:08x}",
+                    u32_at(&self.buffer, 4),
+                    size,
+                    u32_at(&self.buffer, 16),
+                    crc32(size_bytes)
+                ));
                 self.buffer.drain(..HEADER.len());
                 continue;
             }
@@ -152,6 +172,16 @@ impl FrameDecoder {
             let data = &self.buffer[PREFIX_LEN..PREFIX_LEN + size];
             if u32_at(&self.buffer, PREFIX_LEN + size) != crc32(data) {
                 self.dropped += 1;
+                self.last_drop = Some(format!(
+                    "data crc: id {} size {} crc {:08x} want {:08x}",
+                    u32_at(&self.buffer, 4),
+                    size,
+                    u32_at(&self.buffer, PREFIX_LEN + size),
+                    crc32(data)
+                ));
+                if self.bad_frame.is_none() {
+                    self.bad_frame = Some(self.buffer[..total].to_vec());
+                }
                 self.buffer.drain(..HEADER.len());
                 continue;
             }

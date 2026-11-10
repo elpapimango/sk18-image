@@ -26,3 +26,4 @@ wpa_supplicant*.conf
 
 # Per-machine Claude Code settings (contain host-specific permission rules)
 .claude/
+dist/

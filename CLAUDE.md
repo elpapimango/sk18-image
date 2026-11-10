@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A reproducible, mainline-based Buildroot SD image (U-Boot 2026.10, Linux 7.3.1) for the Waveshare SK-18 "ScreenKey" (Allwinner T113-S3, 720x1280 panel used turned 90° as a 3-row x 6-column key grid), plus the on-device Rust client. The device works as a macro deck with the user's `controldeck-rs` (`C:\Users\mholmert\Workspace\control-deck-rs`, running on the DietPi at 192.168.0.190) and with OpenDeck. Why and how: `docs/decision-log.md` (D-001 onwards, newest last; read the latest entries first), `docs/hardware-status.md`.
+A reproducible, mainline-based Buildroot SD image (U-Boot 2026.10, Linux 7.3.1) for the Waveshare SK-18 "ScreenKey" (Allwinner T113-S3, 720x1280 panel used turned 90° as a 3-row x 6-column key grid), plus the on-device Rust client. The device works as a macro deck with the user's `controldeck-rs` (`C:\Users\mholmert\Workspace\control-deck-rs`, running on the DietPi at 192.168.0.190) and with OpenDeck.
+
+Four repositories live next to each other in `C:\Users\mholmert\Workspace\`: **sk18-image** (this one: everything that goes onto the SD card image), **control-deck-rs** (the gateway, the deck drivers and the web UI), **opendeck-control-deck** (OpenDeck plugin that talks to the gateway) and **opendeck-sk18** (OpenDeck plugin that talks to an SK-18 directly, stock or open firmware). The plugins use `control-deck-rs` crates by path. Why and how: `docs/decision-log.md` (D-001 onwards, newest last; read the latest entries first), `docs/hardware-status.md`.
 
 Working rules that have held throughout: evidence first, record every decision in the decision log, commit in git, never modify the original image or card, positively identify an SD target before writing, no proprietary binaries, credentials or large images in git, pin versions, quote paths.
 
@@ -14,11 +16,12 @@ Working rules that have held throughout: evidence first, record every decision i
 - `client/`: Cargo workspace for the board (`sk18-keys` UART1 key decoder and shared key geometry, `sk18-link` daemon that speaks the stock deck serial protocol to the host over the USB gadget, `sk18-splash` boot animation). `Cargo.lock` is committed; the serial code is Unix only.
 - `tools/flash/`: `flash-sdcard.sh <sha256>` (guarded flasher, runs on the DietPi; add each new image's ext4 PARTUUID to its KNOWN list), `provision-wifi.sh`.
 - `docs/`: decision log, hardware status, protocol notes (`stock-serial-protocol.md`, `hid-transport.md`, `uart1-key-protocol.md`), phase write-ups.
+- `tools/build/`: `build.sh` (Buildroot build; `--clean-kernel`, `--clean-clients`) and `release.sh <version>` (writes `dist/sk18-image-<version>.img.xz` for balenaEtcher plus checksums).
 - `work/`: scratch scripts and built images (git-ignored). `image/`: original card image and vendor zip, git-ignored, read-only, never `git add` it.
 
 ## Build
 
-Buildroot lives in WSL distro `BuildRoot` (`~/buildroot`, output `~/sk18-build`). From Windows: `wsl -d BuildRoot bash /mnt/c/Temp/sk18/work/rebuild_all.sh` (dirclean of the three client packages, then make) or `work/rebuild_kernel.sh` (after a kernel patch change); progress in `~/sk18-build/build.status`. The first build needs network (cargo vendor, crates.io). Client crates: `cargo test` and `cargo clippy --all-targets -- -D warnings` in `client/`; the board is 32-bit hard-float Cortex-A7 (`armv7-unknown-linux-gnueabihf`).
+Buildroot lives in WSL distro `BuildRoot` (`~/buildroot`, output `~/sk18-build`). From Windows: `wsl -d BuildRoot bash /mnt/c/Users/mholmert/Workspace/sk18-image/tools/build/build.sh` (add `--clean-clients` after a change under `client/`, `--clean-kernel` after a kernel patch or `linux.fragment` change); progress in `~/sk18-build/build.status`. The first build needs network (cargo vendor, crates.io). Client crates: `cargo test` and `cargo clippy --all-targets -- -D warnings` in `client/`; the board is 32-bit hard-float Cortex-A7 (`armv7-unknown-linux-gnueabihf`). A release for balenaEtcher: `tools/build/release.sh 0.2.0` (inside WSL).
 
 ## Deploying and testing on hardware
 

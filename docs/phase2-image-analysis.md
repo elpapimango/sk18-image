@@ -6,7 +6,7 @@ Status labels: **Confirmed** (read from the image), **Inferred** (reasoned, not 
 
 | Item | Value |
 |---|---|
-| Image | `C:\Temp\sk18\image\waveshare_sk18.img` (WSL: `/mnt/c/Temp/sk18/image/`) |
+| Image | `image\waveshare_sk18.img` in this repository (git-ignored; WSL: `/mnt/c/Users/mholmert/Workspace/sk18-image/image/`) |
 | Size | 4,026,531,840 bytes (3.75 GiB), raw whole-disk image |
 | SHA-256 | `cfcc04488158e411c0bdaedacb302f881b444a6af25630c113f80f3f63faf4e7` |
 | Vendor zip | `MK Series Upper Computer Open Source_V1.0.zip`, 758,887,616 bytes |

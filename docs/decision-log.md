@@ -338,3 +338,15 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - **Host:** udev rule for the hidraw node (manufacturer `SK18 open firmware`) added to `70-control-deck-sk18.rules`; gateway v8 deployed on the DietPi (device id unchanged: `waveshare-sk18`, no serial number).
 - **Tests:** framing round trip and bad lengths on both sides; discovery prefers HID over serial. **Observed on the real board (image `4b4b91d6`, card flashed as a new card, Wi-Fi carried over):** the gateway lists it as `hid /dev/hidraw5` next to the Stream Deck's `hid /dev/hidraw4`, state attached, 18 keys, no warnings; the user confirmed that images show and keys respond. Throughput and unplug/replug recovery not measured separately.
 - **Still open:** the ~5 pictures per second seen in the old log before the 2026-11-10 stop (what repaints that often?).
+
+## D-042 — Four repositories (2026-11-10)
+
+- **Decision (user):** one repository for everything that goes onto an SD card image (flashable with balenaEtcher or any tool), one for controldeck-rs, one for the OpenDeck plugin that connects to controldeck-rs, one for an OpenDeck plugin that connects the SK-18 to OpenDeck directly, working with the stock image if possible.
+- **Done (local repositories under `C:\Users\mholmert\Workspace\`, nothing pushed):**
+  - `sk18-image` (this repository, history kept; the old working copy `C:\Temp\sk18` is superseded): Buildroot external tree, board programs, docs, `tools/build/build.sh` (works from the new place, also under WSL's spaced PATH) and `tools/build/release.sh <version>` which writes `dist/sk18-image-<version>.img.xz` (12 MB for the 64 MB image) with SHA256SUMS for balenaEtcher. `work/` and `image/` (git-ignored) moved with it.
+  - `control-deck-rs`: the plugin directory is gone (workspace member, CI job, release job, packaging); `main` now carries the work of the former `feature/deck-sk18` branch (fast-forward). `deck-sk18` exposes its HID framing so that other repositories can supply a backend.
+  - `opendeck-control-deck`: the plugin, split out with its history (`git subtree split`), own Cargo.toml, packaging, README, CI. 63 tests pass standalone.
+  - `opendeck-sk18` (new): OpenDeck plugin that opens the SK-18 itself through `deck-sk18` (stock serial or open-firmware HID; Linux through sysfs, Windows and macOS through `serialport` and `hidapi`), registers it as a device with 3 rows by 6 keys, forwards key presses and draws OpenDeck's key images. 7 tests, including an end-to-end one against the virtual device.
+- **Shared code:** the plugins use `control-deck-rs` crates by path (`../control-deck-rs/...`). When that repository has a remote and a tag, the path dependencies become git dependencies (see their READMEs).
+- **Not done / not observed:** nothing was pushed or created on GitHub; `opendeck-sk18` has not been run against a real OpenDeck or a real SK-18 from this repository (the driver code is the one the gateway uses on the real device); its Linux build is left to CI (WSL has no cargo outside Buildroot).
+

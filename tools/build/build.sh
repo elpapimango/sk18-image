@@ -29,6 +29,10 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
+# Buildroot refuses a PATH with spaces; under WSL the Windows PATH is appended to it. Keep the entries without whitespace.
+PATH=$(printf %s "$PATH" | tr : '
+' | grep -v "[[:space:]]" | paste -sd:)
+export PATH
 export BR2_EXTERNAL="$repo/br2-external"
 cd "$buildroot"
 [ -f "$out/.config" ] || make O="$out" waveshare_sk18_defconfig

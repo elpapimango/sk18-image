@@ -13,7 +13,7 @@ Working rules that have held throughout: evidence first, record every decision i
 - `br2-external/`: Buildroot external tree (`configs/waveshare_sk18_defconfig`, `board/waveshare/sk18/` with DTS, kernel/U-Boot fragments, `overlay/` init scripts and udev rules, `patches/linux/*.patch`, packages `sk18-keys`, `sk18-link`, `sk18-splash`, `sk18-wifi-firmware`).
 - `client/`: Cargo workspace for the board (`sk18-keys` UART1 key decoder and shared key geometry, `sk18-link` daemon that speaks the stock deck serial protocol to the host over the USB gadget, `sk18-splash` boot animation). `Cargo.lock` is committed; the serial code is Unix only.
 - `tools/flash/`: `flash-sdcard.sh <sha256>` (guarded flasher, runs on the DietPi; add each new image's ext4 PARTUUID to its KNOWN list), `provision-wifi.sh`.
-- `docs/`: decision log, hardware status, protocol notes (`stock-serial-protocol.md`, `uart1-key-protocol.md`), phase write-ups.
+- `docs/`: decision log, hardware status, protocol notes (`stock-serial-protocol.md`, `hid-transport.md`, `uart1-key-protocol.md`), phase write-ups.
 - `work/`: scratch scripts and built images (git-ignored). `image/`: original card image and vendor zip, git-ignored, read-only, never `git add` it.
 
 ## Build
@@ -22,7 +22,7 @@ Buildroot lives in WSL distro `BuildRoot` (`~/buildroot`, output `~/sk18-build`)
 
 ## Deploying and testing on hardware
 
-- The board has two USB ACM ports (ttyACM0 = deck protocol, ttyACM1 = getty console) and no network unless Wi-Fi credentials are on the card. Anything that drops the USB gadget (unbinding the UDC) must run as a detached `setsid sh script &`.
+- The board is one USB device with a HID function (hidraw on the host = deck protocol, D-041) and one ACM port (getty console) and no network unless Wi-Fi credentials are on the card. Anything that drops the USB gadget (unbinding the UDC) must run as a detached `setsid sh script &`.
 - Images are flashed from the DietPi's card reader; the user swaps the card and replugs. `scp` the image to the DietPi, then `bash flash-sdcard.sh <sha256>`.
 - controldeck-rs is built and tested on the DietPi (`~/control-deck-rs-sk18`; Windows `cargo check` skips the Unix-only gatewayd code), installed as `/usr/local/bin/gatewayd` for the `control-deck-gatewayd` service (keep a timestamped backup, roll back if it does not become active). Its config is `/etc/control-deck/config.toml`.
 - On Windows prefer script files over inline quoting for ssh/scp/PowerShell commands.

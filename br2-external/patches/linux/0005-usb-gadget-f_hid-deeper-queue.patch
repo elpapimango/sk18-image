@@ -1,0 +1,22 @@
+From: SK-18 open firmware <noreply@example.invalid>
+Subject: [PATCH] usb: gadget: f_hid: queue 1024 OUT reports instead of 4
+
+The SK-18 carries its deck protocol in 512-byte HID reports. A 58 KB frame
+is about 115 reports back to back. f_hid queues only 4 receive requests,
+which is the same problem as with u_serial (see the u_serial patch): the
+sunxi musb controller has a packet in its FIFO with no request to put it
+in once the queue runs dry, and packets go missing. Queueing 1024 requests
+(512 KB) keeps the queue from running dry during a burst.
+
+---
+--- a/drivers/usb/gadget/function/f_hid.c	2026-11-10 10:04:32.384955706 -0600
++++ b/drivers/usb/gadget/function/f_hid.c	2026-11-10 10:04:32.391934758 -0600
+@@ -1653,7 +1653,7 @@
+ 	hidg->func.free_func = hidg_free;
+ 
+ 	/* this could be made configurable at some point */
+-	hidg->qlen	   = 4;
++	hidg->qlen	   = 1024;
+ 
+ 	return &hidg->func;
+ 

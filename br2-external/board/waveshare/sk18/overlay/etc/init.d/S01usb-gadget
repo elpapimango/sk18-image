@@ -1,7 +1,7 @@
 #!/bin/sh
-# USB gadget of the SK-18: one device, two CDC-ACM serial ports.
-#   acm.usb0 -> /dev/ttyGS0 on the device, ttyACM0 on the host: the deck protocol (sk18-link)
-#   acm.usb1 -> /dev/ttyGS1 on the device, ttyACM1 on the host: the login console (getty, see inittab)
+# USB gadget of the SK-18: one device with a HID function and a CDC-ACM serial port.
+#   hid.usb0 -> /dev/hidg0 on the device, /dev/hidrawN on the host: the deck protocol (sk18-link, docs/hid-transport.md)
+#   acm.usb0 -> /dev/ttyGS0 on the device, ttyACM0 on the host: the login console (getty, see inittab)
 # The ID is 1d6b:0104, the one the controldeck driver (deck-sk18) looks for. There is deliberately NO serial
 # number string, like the stock firmware: the host derives the device id from it, and a new id would lose the
 # user's OpenDeck layout.
@@ -21,11 +21,18 @@ start() {
 	echo "SK-18 Deck" > strings/0x409/product
 	mkdir configs/c.1
 	mkdir configs/c.1/strings/0x409
-	echo "Deck protocol and console" > configs/c.1/strings/0x409/configuration
+	echo "Deck protocol (HID) and console" > configs/c.1/strings/0x409/configuration
 	echo 250 > configs/c.1/MaxPower
-	mkdir functions/acm.usb0 functions/acm.usb1
+	mkdir functions/hid.usb0 functions/acm.usb0
+	# One vendor-defined 512-byte input report and one output report, no report ids (the musb FIFOs are 512 bytes).
+	# interval 1 = every microframe: the stock 4 would allow only 512 bytes per millisecond.
+	echo 0 > functions/hid.usb0/protocol
+	echo 0 > functions/hid.usb0/subclass
+	echo 512 > functions/hid.usb0/report_length
+	echo 1 > functions/hid.usb0/interval
+	printf '\006\000\377\011\001\241\001\025\000\046\377\000\165\010\226\000\002\011\001\201\002\226\000\002\011\002\221\002\300' > functions/hid.usb0/report_desc
+	ln -s functions/hid.usb0 configs/c.1/
 	ln -s functions/acm.usb0 configs/c.1/
-	ln -s functions/acm.usb1 configs/c.1/
 	# the controller shows up a moment after the kernel started
 	i=0
 	udc=""
@@ -43,8 +50,8 @@ start() {
 stop() {
 	[ -d "$G" ] || return 0
 	echo "" > "$G/UDC" 2>/dev/null
-	rm -f "$G"/configs/c.1/acm.usb0 "$G"/configs/c.1/acm.usb1
-	rmdir "$G"/configs/c.1/strings/0x409 "$G"/configs/c.1 "$G"/functions/acm.usb0 "$G"/functions/acm.usb1 \
+	rm -f "$G"/configs/c.1/hid.usb0 "$G"/configs/c.1/acm.usb0
+	rmdir "$G"/configs/c.1/strings/0x409 "$G"/configs/c.1 "$G"/functions/hid.usb0 "$G"/functions/acm.usb0 \
 		"$G"/strings/0x409 "$G"
 }
 

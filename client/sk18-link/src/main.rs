@@ -4,9 +4,10 @@
 use std::process::ExitCode;
 
 const USAGE: &str = "\
-usage: sk18-link [--port /dev/ttyGS0] [--keys /dev/ttyS0] [--fb /dev/fb0] [--backlight PATH] [--verbose]
+usage: sk18-link [--port /dev/hidg0] [--keys /dev/ttyS0] [--fb /dev/fb0] [--backlight PATH] [--verbose]
 
-  --port PATH        the USB gadget serial port that carries the deck protocol (default /dev/ttyGS0)
+  --port PATH        the USB gadget port that carries the deck protocol: a HID function (/dev/hidg0, the default) or a
+                     serial port (/dev/ttyGS0)
   --keys PATH        the serial port of the key controller, UART1 (default /dev/ttyS0)
   --fb PATH          the framebuffer (default /dev/fb0)
   --backlight PATH   the sysfs brightness file (default /sys/class/backlight/backlight/brightness)
@@ -15,7 +16,7 @@ usage: sk18-link [--port /dev/ttyGS0] [--keys /dev/ttyS0] [--fb /dev/fb0] [--bac
 #[cfg(unix)]
 mod run {
     use std::fs::File;
-    use std::io::{Read, Write};
+    use std::io::{self, Read, Write};
     use std::path::PathBuf;
     use std::sync::{Arc, Mutex};
     use std::thread;
@@ -24,6 +25,7 @@ mod run {
     use sk18_keys::{Decoder as KeyDecoder, Frame as KeyFrame, Orientation};
     use sk18_link::device::{key_event, Device};
     use sk18_link::ha::{Notifier, SharedHa};
+    use sk18_link::hid::HidPort;
     use sk18_link::hw::LinuxHardware;
     use sk18_link::protocol::{Frame, FrameDecoder};
     use sk18_link::serial::{data_waiting, open_raw, wait_readable};
@@ -37,8 +39,73 @@ mod run {
         pub verbose: bool,
     }
 
+    /// The port of the deck protocol: a serial port or the gadget's HID function (decision D-041).
+    enum Port {
+        Tty(File),
+        Hid(HidPort),
+    }
+
+    impl Port {
+        fn open(path: &std::path::Path) -> io::Result<Self> {
+            if path.file_name().is_some_and(|n| n.to_string_lossy().starts_with("hidg")) {
+                let file = std::fs::OpenOptions::new().read(true).write(true).open(path)?;
+                Ok(Self::Hid(HidPort::new(file)))
+            } else {
+                open_raw(path).map(Self::Tty)
+            }
+        }
+
+        fn try_clone(&self) -> io::Result<Self> {
+            match self {
+                Self::Tty(f) => f.try_clone().map(Self::Tty),
+                Self::Hid(h) => h.try_clone().map(Self::Hid),
+            }
+        }
+
+        fn file(&self) -> &File {
+            match self {
+                Self::Tty(f) => f,
+                Self::Hid(h) => h.file(),
+            }
+        }
+
+        /// Is there data the port holds without having woken the poll (a serial line discipline quirk, D-037)?
+        fn data_waiting(&self) -> bool {
+            matches!(self, Self::Tty(f) if data_waiting(f))
+        }
+    }
+
+    impl Read for Port {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            match self {
+                Self::Tty(f) => f.read(buf),
+                Self::Hid(h) => h.read(buf),
+            }
+        }
+    }
+
+    impl Write for Port {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            match self {
+                Self::Tty(f) => f.write(buf),
+                Self::Hid(h) => h.write(buf),
+            }
+        }
+
+        fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+            match self {
+                Self::Tty(f) => f.write_all(buf),
+                Self::Hid(h) => h.write_all(buf),
+            }
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
     /// The host connection shared by the thread that answers requests and the one that reports key presses.
-    type Link = Arc<Mutex<Option<File>>>;
+    type Link = Arc<Mutex<Option<Port>>>;
 
     /// Milliseconds since the first call, for the verbose log.
     fn ms() -> u128 {
@@ -105,7 +172,7 @@ mod run {
 
         let mut waiting_reported = false;
         loop {
-            let mut port = match open_raw(&o.port) {
+            let mut port = match Port::open(&o.port) {
                 Ok(p) => p,
                 Err(e) => {
                     if !waiting_reported {
@@ -140,11 +207,11 @@ mod run {
                 }
                 polls += 1;
                 // If the kernel does not wake us for data it holds, find it here (see `data_waiting`).
-                match wait_readable(&port, 20) {
+                match wait_readable(port.file(), 20) {
                     Ok(true) => {}
                     Ok(false) => {
                         timeouts += 1;
-                        if !data_waiting(&port) {
+                        if !port.data_waiting() {
                             continue;
                         }
                         waiting_hits += 1;
@@ -193,7 +260,7 @@ mod run {
 #[cfg(unix)]
 fn parse() -> Result<Option<run::Options>, String> {
     let mut o = run::Options {
-        port: "/dev/ttyGS0".into(),
+        port: "/dev/hidg0".into(),
         keys: "/dev/ttyS0".into(),
         fb: "/dev/fb0".into(),
         backlight: "/sys/class/backlight/backlight/brightness".into(),

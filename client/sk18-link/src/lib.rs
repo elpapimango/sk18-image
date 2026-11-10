@@ -11,5 +11,6 @@ pub mod protocol;
 pub mod settings;
 #[cfg(unix)]
 pub mod hw;
+pub mod hid;
 #[cfg(unix)]
 pub mod serial;

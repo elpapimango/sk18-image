@@ -1,6 +1,6 @@
 # Kernel options on top of arch/arm/configs/sunxi_defconfig.
-# Boot to a shell on the UART (ttyS3) and on the USB gadget's second serial port (ttyGS1); the first (ttyGS0) carries
-# the deck protocol.
+# Boot to a shell on the UART (ttyS3) and on the USB gadget's serial port (ttyGS0). The deck protocol runs over the
+# gadget's HID function (/dev/hidg0, decision D-041).
 
 # Console
 CONFIG_SERIAL_EARLYCON=y
@@ -20,6 +20,7 @@ CONFIG_PHY_SUN4I_USB=y
 CONFIG_USB_GADGET=y
 CONFIG_USB_CONFIGFS=y
 CONFIG_USB_CONFIGFS_ACM=y
+CONFIG_USB_CONFIGFS_F_HID=y
 
 # Display: DE2 mixer, TCON, MIPI-DSI and D-PHY (on by default with DRM_SUN4I), the panel driver
 # (HX8394 plus the SK-18 entry) comes from patches/linux/0001, the backlight is hardware PWM channel 3 (patches/linux/0003).

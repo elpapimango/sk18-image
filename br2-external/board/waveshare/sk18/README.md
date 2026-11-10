@@ -34,8 +34,8 @@ Intermediate commands: `make O=... linux-menuconfig`, `uboot-menuconfig`, `saved
 
 - UART3 (PB6/PB7), 115200 8N1, is the console of the SPL, U-Boot and Linux (`ttyS3`). Where the pins
   are on the board is not yet known.
-- The kernel also has a USB serial gadget: with the SK-18 connected to a host, `/dev/ttyACM*` shows a
-  login prompt (`ttyGS0`). The root account has an empty password in this bring-up image.
+- The kernel also has a USB gadget with a HID function (the deck protocol, `/dev/hidraw*` on the host) and a serial
+  port: with the SK-18 connected to a host, `/dev/ttyACM*` shows a login prompt (`ttyGS0`). The root account has an empty password in this bring-up image.
 
 ## Flashing
 

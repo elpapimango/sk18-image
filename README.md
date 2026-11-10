@@ -25,7 +25,7 @@ Wi-Fi and Home Assistant are set from the controldeck web UI (device page, *Sett
 Needs Linux (on Windows: WSL) with Buildroot's host requirements and network access for the first build.
 
 ```sh
-git clone https://github.com/<you>/buildroot ~/buildroot      # the Buildroot version this was built with: see docs/
+git clone https://gitlab.com/buildroot.org/buildroot.git ~/buildroot   # the version used is recorded in docs/decision-log.md
 tools/build/build.sh                      # ~/sk18-build/images/sdcard.img
 tools/build/release.sh 0.2.0              # dist/sk18-image-0.2.0.img.xz + SHA256SUMS for Etcher
 ```
@@ -46,3 +46,11 @@ No proprietary binaries, credentials or large images are kept in git. The stock 
 project started from stay outside the repository (`image/`, git-ignored).
 
 Working notes for contributors and for Claude Code are in [CLAUDE.md](CLAUDE.md).
+
+## Licence
+
+The original code in this repository (the programs under `client/`, the scripts, the Buildroot package and board files, the
+documentation) is licensed under either of the [Apache License 2.0](LICENSE-APACHE) or the [MIT license](LICENSE-MIT), at your
+option. The kernel patches in `br2-external/patches/` and the device tree are derived from Linux and stay under
+GPL-2.0 (with the Linux syscall note where the file says so). Buildroot and the packages it downloads have their own licences.
+This is an independent community project; it is not affiliated with or endorsed by Waveshare.

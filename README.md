@@ -1,5 +1,7 @@
 # sk18-image
 
+[![CI](https://github.com/elpapimango/sk18-image/actions/workflows/ci.yml/badge.svg)](https://github.com/elpapimango/sk18-image/actions/workflows/ci.yml)
+
 A reproducible SD card image for the **Waveshare SK-18 "ScreenKey"** (Allwinner T113-S3, 720×1280 touch panel used on its side as
 a 3×6 key grid): mainline U-Boot and Linux built with Buildroot, plus the Rust programs that run on the board. Everything
 that ends up on the card is in this repository.
@@ -11,7 +13,7 @@ they talk to.
 
 ## Flash a release (balenaEtcher or any other tool)
 
-1. Download `sk18-image-<version>.img.xz` from the releases page (or build it, below).
+1. Download `sk18-image-<version>.img.xz` from the [releases page](https://github.com/elpapimango/sk18-image/releases) (or build it, below).
 2. Open **balenaEtcher**, choose *Flash from file* and pick the `.img.xz` (no need to unpack it), choose the SD card, *Flash*.
    Raspberry Pi Imager (*Use custom*), `dd` and others work as well; the checksum of the unpacked image is in `SHA256SUMS`.
    The card needs 1 GB or more; the image is about 64 MB.
@@ -25,10 +27,14 @@ Wi-Fi and Home Assistant are set from the controldeck web UI (device page, *Sett
 Needs Linux (on Windows: WSL) with Buildroot's host requirements and network access for the first build.
 
 ```sh
-git clone https://gitlab.com/buildroot.org/buildroot.git ~/buildroot   # the version used is recorded in docs/decision-log.md
+tools/build/fetch-buildroot.sh            # the pinned Buildroot commit (tools/build/BUILDROOT_COMMIT) into ~/buildroot
 tools/build/build.sh                      # ~/sk18-build/images/sdcard.img
-tools/build/release.sh 0.2.0              # dist/sk18-image-0.2.0.img.xz + SHA256SUMS for Etcher
+tools/build/release.sh 0.1.0              # dist/sk18-image-0.1.0.img.xz + SHA256SUMS for Etcher
 ```
+
+The version of an image is the client version in `client/Cargo.toml` (see [CHANGELOG.md](CHANGELOG.md)); the board shows it in
+`/etc/sk18-release` and reports it to the host as its firmware version. **Releases are made by CI:** pushing a tag `v<version>`
+runs the `Release` workflow, which builds the image from that commit and publishes it with its checksums.
 
 `build.sh --clean-clients` rebuilds the Rust programs after a change under `client/`, `--clean-kernel` the kernel after a patch.
 

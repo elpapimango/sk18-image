@@ -28,6 +28,12 @@ sed -e "s/%LINUXIMAGE%/$(linux_image)/g" \
 
 sed "s/%PARTUUID%/${PARTUUID}/g" "${BOARD}/genimage.cfg" > "${BINARIES_DIR}/genimage.cfg"
 
+# Which image this is (also what `cat /etc/sk18-release` shows on the board). build.sh sets the variables.
+cat > "${TARGET_DIR}/etc/sk18-release" <<RELEASE
+SK18_IMAGE_VERSION=${SK18_IMAGE_VERSION:-dev}
+SK18_IMAGE_COMMIT=${SK18_IMAGE_COMMIT:-unknown}
+RELEASE
+
 # A second login on the USB gadget's serial port (ttyGS0) next to the UART console. The deck protocol is on the
 # gadget's HID function (/dev/hidg0), not on a serial port. An older build may have left a getty on ttyGS1 in the
 # target tree: it must go.

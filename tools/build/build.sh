@@ -6,7 +6,8 @@
 #   --clean-kernel    rebuild the kernel from scratch (after a change to a kernel patch or to linux.fragment)
 #   --clean-clients   rebuild sk18-keys, sk18-link and sk18-splash (after a change under client/)
 #   --out DIR         Buildroot output directory (default ~/sk18-build)
-#   --buildroot DIR   a Buildroot checkout (default ~/buildroot; the version is pinned in docs/)
+#   --buildroot DIR   a Buildroot checkout (default ~/buildroot, at the commit in tools/build/BUILDROOT_COMMIT;
+#                     tools/build/fetch-buildroot.sh puts it there)
 #
 # The first build needs network access (sources, the Rust crates). The image is DIR/images/sdcard.img; turn it into a file
 # for balenaEtcher with tools/build/release.sh.
@@ -34,7 +35,13 @@ PATH=$(printf %s "$PATH" | tr : '
 ' | grep -v "[[:space:]]" | paste -sd:)
 export PATH
 export BR2_EXTERNAL="$repo/br2-external"
+# What the image says about itself (/etc/sk18-release): the version of the client workspace, the commit it is built from.
+SK18_IMAGE_VERSION=$(grep -m 1 '^version = ' "$repo/client/Cargo.toml" | cut -d'"' -f2)
+SK18_IMAGE_COMMIT=$(git -C "$repo" describe --always --dirty 2>/dev/null || echo unknown)
+export SK18_IMAGE_VERSION SK18_IMAGE_COMMIT
 cd "$buildroot"
+pinned=$(tr -d '[:space:]' < "$here/BUILDROOT_COMMIT")
+[ "$(git rev-parse HEAD 2>/dev/null)" = "$pinned" ] || echo "warning: $buildroot is not at the pinned Buildroot commit $pinned (tools/build/fetch-buildroot.sh)" >&2
 [ -f "$out/.config" ] || make O="$out" waveshare_sk18_defconfig
 rm -f "$out/build.status"
 {

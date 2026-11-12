@@ -1,0 +1,98 @@
+name: Release
+
+# Pushing a tag vX.Y.Z builds the image from that commit and publishes it as a GitHub release
+# (sk18-image-X.Y.Z.img.xz for balenaEtcher, SHA256SUMS). Run by hand (workflow_dispatch) it builds the same files
+# and keeps them as a workflow artifact without publishing.
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  image:
+    name: Build the SD card image
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: version
+        run: |
+          crate=$(grep -m 1 '^version = ' client/Cargo.toml | cut -d'"' -f2)
+          echo "version=$crate" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" = tag ] && [ "${GITHUB_REF_NAME}" != "v$crate" ]; then
+            echo "tag ${GITHUB_REF_NAME} does not match the client version $crate (client/Cargo.toml)" >&2
+            exit 1
+          fi
+          grep -q "^## \[$crate\]" CHANGELOG.md || { echo "CHANGELOG.md has no section for $crate" >&2; exit 1; }
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Host packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential bc bison flex cpio rsync unzip file wget git ca-certificates xz-utils \
+            python3 python3-setuptools python3-dev swig libssl-dev libncurses-dev libelf-dev \
+            libgnutls28-dev uuid-dev device-tree-compiler ccache
+
+      - name: Buildroot (pinned commit)
+        run: tools/build/fetch-buildroot.sh "$HOME/buildroot"
+
+      - name: Download cache
+        uses: actions/cache@v4
+        with:
+          path: ~/sk18-build/dl
+          key: dl-${{ hashFiles('tools/build/BUILDROOT_COMMIT', 'br2-external/configs/*', 'br2-external/package/**', 'client/Cargo.lock') }}
+          restore-keys: dl-
+
+      - name: Build
+        run: |
+          mkdir -p "$HOME/sk18-build"
+          tools/build/build.sh --out "$HOME/sk18-build" --buildroot "$HOME/buildroot"
+
+      - name: Check the image
+        run: |
+          img="$HOME/sk18-build/images/sdcard.img"
+          size=$(stat -c %s "$img")
+          echo "image size: $size"
+          [ "$size" -gt 20000000 ] && [ "$size" -lt 200000000 ]
+          sfdisk -d "$img" || true
+          # SPL at 8 KiB: the boot ROM looks for the eGON header there
+          [ "$(dd if="$img" bs=1 skip=$((8192 + 4)) count=8 status=none)" = "eGON.BT0" ]
+          echo "version in the image:"; debugfs -R 'cat /etc/sk18-release' "$HOME/sk18-build/images/rootfs.ext4" 2>/dev/null
+
+      - name: Pack for balenaEtcher
+        run: tools/build/release.sh "${{ steps.version.outputs.version }}" --out dist --image "$HOME/sk18-build/images/sdcard.img"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sk18-image-${{ steps.version.outputs.version }}
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Release notes
+        if: github.ref_type == 'tag'
+        run: |
+          v="${{ steps.version.outputs.version }}"
+          awk -v v="$v" '$0 ~ "^## \[" v "\]" {on=1; next} /^## \[/ {on=0} on' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "SK-18 image $v" > notes.md
+          {
+            echo
+            echo "Flash \`sk18-image-$v.img.xz\` with balenaEtcher (no need to unpack it). \`SHA256SUMS\` has the checksums of the download and of the unpacked image."
+          } >> notes.md
+
+      - name: Publish
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --title "SK-18 image ${GITHUB_REF_NAME#v}" --notes-file notes.md --verify-tag

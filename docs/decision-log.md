@@ -350,3 +350,11 @@ Each entry: observed, inferred, changed, why, reproduce, test, roll back.
 - **Shared code:** the plugins use `control-deck-rs` crates by path (`../control-deck-rs/...`). When that repository has a remote and a tag, the path dependencies become git dependencies (see their READMEs).
 - **Not done / not observed:** nothing was pushed or created on GitHub; `opendeck-sk18` has not been run against a real OpenDeck or a real SK-18 from this repository (the driver code is the one the gateway uses on the real device); its Linux build is left to CI (WSL has no cargo outside Buildroot).
 
+
+## D-043 — Releases from CI, one version, pinned Buildroot (2026-11-12)
+
+- **Problem found (user):** the README promised a release but the repository had no CI and no GitHub release, and no version.
+- **Decision:** the version of an image is the version of the client workspace (`client/Cargo.toml`, first release `0.1.0`); the board reports it as its firmware version (`open-<version>`, now taken from `CARGO_PKG_VERSION`) and writes `/etc/sk18-release` (version and commit) into the image. A release is made by pushing the tag `v<version>`: the `Release` workflow checks that tag, version and `CHANGELOG.md` agree, builds the image on a GitHub runner from the Buildroot commit pinned in `tools/build/BUILDROOT_COMMIT` (fetched by `tools/build/fetch-buildroot.sh`), checks the image (size, SPL header at 8 KiB, partition table), packs it with `release.sh` and publishes `sk18-image-<version>.img.xz` and `SHA256SUMS`. `CI` runs fmt, clippy, tests and an ARMv7 type-check of the client, shellcheck of the scripts, and the changelog check.
+- **Done on the way:** the client had never been run through rustfmt: `client/rustfmt.toml` (`max_width = 110`, as in control-deck-rs) and one formatting commit; `rust-version` raised to 1.82 (the code uses `Option::is_none_or`; Buildroot builds with 1.99.1); fixed in WSL: the Ubuntu distro needs `CARGO_HTTP_PROXY`/`CARGO_HTTP_CAINFO` because cargo reads the Windows `~/.cargo/config.toml` through `/mnt/c`.
+- **Observed locally (WSL, Buildroot `60a3423e95`):** the image builds, `/etc/sk18-release` says `SK18_IMAGE_VERSION=0.1.0`, the SPL header `eGON.BT0` is at 8196, clippy and the 80 client tests pass.
+- **Not yet observed:** a build on a GitHub runner (host package list, disk space and duration are guesses until the first run).

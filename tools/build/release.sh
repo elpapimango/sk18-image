@@ -23,6 +23,9 @@ while [ $# -gt 0 ]; do
 	shift
 done
 
+# The release version is the version of the client workspace (what the board reports as its firmware version).
+crate=$(grep -m 1 '^version = ' "$repo/client/Cargo.toml" | cut -d'"' -f2)
+[ "$version" = "$crate" ] || { echo "version $version is not the client version $crate (client/Cargo.toml): change one of them" >&2; exit 1; }
 [ -f "$image" ] || { echo "no image at $image: build it first (tools/build/build.sh)" >&2; exit 1; }
 mkdir -p "$out"
 name="sk18-image-$version"

@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  client:
+    name: Client (fmt, clippy, tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: armv7-unknown-linux-gnueabihf
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: client
+      - run: cargo fmt --all --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo test --locked
+      # The board is 32-bit hard-float ARM: the programs must at least type-check for it.
+      - run: cargo check --locked --target armv7-unknown-linux-gnueabihf
+
+  scripts:
+    name: Scripts and version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck -S warning tools/build/*.sh br2-external/board/waveshare/sk18/post-build.sh
+      - name: Buildroot pin is a full commit
+        run: grep -Eq '^[0-9a-f]{40}$' tools/build/BUILDROOT_COMMIT
+      - name: Changelog has the client version
+        run: |
+          v=$(grep -m 1 '^version = ' client/Cargo.toml | cut -d'"' -f2)
+          grep -q "^## \[$v\]" CHANGELOG.md || { echo "CHANGELOG.md has no section for $v" >&2; exit 1; }

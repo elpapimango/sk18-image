@@ -27,7 +27,12 @@ First release.
   to control-deck-rs and OpenDeck, carried over the HID function (see `docs/hid-transport.md`) so that the host drivers need not
   know which firmware they talk to. Wi-Fi, Home Assistant and picture offset can be set from the controldeck web UI over the
   link. Stock methods this firmware does not implement answer with an error.
+- The answers were compared with a real SK-18 running the stock firmware (V2.31) and made to match: `setBacklight` and `setVolume`
+  results and error texts, `stopAudio`, `playAudio`, `getFilesBySuffix`, the unknown-method list, the error frame for a picture that
+  cannot be decoded, and the ids of events (counting down from `0xFFFFFFFF`). A recorded stock session is replayed in the tests
+  (`client/sk18-link/tests/stock_conformance.rs`); `docs/stock-serial-protocol.md` has the details.
 
 ### Known limits
-- No audio, typing or file-management methods of the stock protocol.
+- No audio, typing or file-management methods of the stock protocol (they answer like a stock device without audio or files, or with an error).
+- The USB transport differs from the stock firmware: this image is a HID function, the stock firmware a serial port, so tools that open a serial port (the vendor demo) do not talk to this image.
 - Not bit-for-bit reproducible: every build gets a fresh root partition UUID.

@@ -175,7 +175,12 @@ fn key_events_look_like_the_recorded_stock_events() {
             assert_eq!(previous - 1, id, "stock ids count down by one");
         }
         if let Some(previous) = last_ours {
-            assert_eq!(previous.wrapping_sub(1), ours.id, "our ids count down by one");
+            // (the counter is shared by every test in this process, so only the direction is certain here)
+            assert!(
+                ours.id < previous,
+                "our ids count down: {previous:#x} then {:#x}",
+                ours.id
+            );
         }
         assert!(ours.id >= 0x8000_0000);
         last_stock = Some(id);

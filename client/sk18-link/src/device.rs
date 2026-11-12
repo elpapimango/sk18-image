@@ -118,19 +118,41 @@ impl<H: Hardware> Device<H> {
     /// Handles one frame from the host and returns the frames to send back.
     pub fn handle(&mut self, frame: &Frame) -> Vec<Frame> {
         match frame.cmd {
-            CMD_SHOW_JPG => {
-                match self.hw.show_jpeg(&frame.data) {
-                    Ok(()) => self.shown += 1,
-                    Err(e) => {
-                        self.failed += 1;
-                        eprintln!("sk18-link: image not shown: {e}");
-                    }
+            CMD_SHOW_JPG => match self.hw.show_jpeg(&frame.data) {
+                Ok(()) => {
+                    self.shown += 1;
+                    vec![Frame::image_shown(frame.id)]
                 }
-                vec![Frame::image_shown(frame.id)]
-            }
+                Err(e) => {
+                    self.failed += 1;
+                    eprintln!("sk18-link: image not shown: {e}");
+                    // As the stock firmware does: an error frame instead of the picture's echo.
+                    vec![Frame::json(
+                        u32::MAX,
+                        &json!({ "errorString": IMAGE_ERROR, "requestId": frame.id }),
+                    )]
+                }
+            },
             CMD_JSON => self.handle_json(frame),
             _ => Vec::new(),
         }
+    }
+
+    /// The methods this firmware answers, sorted, as the stock firmware lists its own in an unknown-method error.
+    fn methods(&self) -> Vec<&'static str> {
+        let mut all = vec![
+            "getFilesBySuffix",
+            "getInfo",
+            "playAudio",
+            "setBacklight",
+            "setVolume",
+            "stopAudio",
+        ];
+        if self.settings.is_some() {
+            all.extend(SETTINGS_METHODS);
+        }
+        all.sort_unstable();
+        all
     }
 
     fn handle_json(&mut self, frame: &Frame) -> Vec<Frame> {
@@ -140,27 +162,106 @@ impl<H: Hardware> Device<H> {
         let Some(method) = request.get("method").and_then(Value::as_str) else {
             return Vec::new(); // an acknowledgement or event from the host: nothing to answer
         };
-        let params = request.get("parameters").cloned().unwrap_or(Value::Null);
+        let params = match request.get("parameters") {
+            None | Some(Value::Null) => Value::Null,
+            Some(object @ Value::Object(_)) => object.clone(),
+            Some(_) => {
+                // The stock firmware answers without an `ack_method` here.
+                return vec![Frame::json(
+                    frame.id,
+                    &json!({ "success": false, "errorString": "Field 'parameters' must be an object" }),
+                )];
+            }
+        };
+        let id = frame.id;
         let reply = match method {
-            "getInfo" => ack(frame.id, method, info()),
-            "setBacklight" => match params.get("level").and_then(Value::as_i64) {
-                Some(level) => {
-                    let percent = level.clamp(0, 100) as u8;
-                    match self.hw.set_backlight_percent(percent) {
-                        Ok(()) => ack(frame.id, method, json!({})),
-                        Err(e) => nack(frame.id, method, &e),
-                    }
-                }
-                None => nack(frame.id, method, "missing integer parameter \"level\""),
+            "getInfo" => ack(id, method, info()),
+            "setBacklight" => match number(&params, "level") {
+                Err(e) => nack(id, method, &e),
+                Ok(level) if !(0.0..=100.0).contains(&level) => nack(
+                    id,
+                    method,
+                    &format!(
+                        "Backlight level must be between 0 and 100, got {}",
+                        shown(&params["level"])
+                    ),
+                ),
+                Ok(level) => match self.hw.set_backlight_percent(level as u8) {
+                    Ok(()) => ack(id, method, json!(level as u8)),
+                    Err(e) => nack(id, method, &e),
+                },
             },
+            // There is no audio on this board: the volume is checked and accepted, the rest answers like a device
+            // without any audio files.
+            "setVolume" => match number(&params, "level") {
+                Err(e) => nack(id, method, &e),
+                Ok(level) if !(0.0..=7.0).contains(&level) => nack(
+                    id,
+                    method,
+                    &format!(
+                        "Volume level must be between 0 and 7, got {}",
+                        shown(&params["level"])
+                    ),
+                ),
+                Ok(level) => ack(id, method, json!(level as u8)),
+            },
+            "stopAudio" => Frame::json(id, &json!({ "ack_method": method, "success": true })),
+            "playAudio" => match params.get("filePath").and_then(Value::as_str) {
+                None => nack(id, method, "Missing 'filePath' parameter"),
+                Some(path) => nack(id, method, &format!("File does not exist: {path}")),
+            },
+            "getFilesBySuffix" => match params.get("suffixs") {
+                None => nack(id, method, "Missing 'suffixs' parameter"),
+                Some(_) => ack(id, method, json!({ "filePaths": [] })),
+            },
+            "keyboardInput" if params.get("inputString").is_none() => {
+                nack(id, method, "Missing 'inputString' parameter")
+            }
+            // The stock methods that change the device's files or type on the host are not part of this firmware.
+            "keyboardInput" | "saveToFile" | "setFileCRC" | "deleteFiles" => {
+                nack(id, method, "not supported by this firmware")
+            }
             other => match self.settings.as_mut().and_then(|s| s.call(other, &params)) {
-                Some(Ok(result)) => ack(frame.id, other, result),
-                Some(Err(e)) => nack(frame.id, other, &e),
-                None => nack(frame.id, other, "not supported by this firmware"),
+                Some(Ok(result)) => ack(id, other, result),
+                Some(Err(e)) => nack(id, other, &e),
+                None => nack(
+                    id,
+                    other,
+                    &format!(
+                        "Unknown method: {other}. Available methods: [{}]",
+                        self.methods().join(", ")
+                    ),
+                ),
             },
         };
         vec![reply]
     }
+}
+
+/// The methods of the settings backend (open firmware only).
+const SETTINGS_METHODS: [&str; 5] = [
+    "getSettings",
+    "setWifi",
+    "clearWifi",
+    "setHomeAssistant",
+    "testHomeAssistant",
+];
+
+/// What the stock firmware says when a picture cannot be decoded.
+const IMAGE_ERROR: &str = "Image decoding failed, the image size may be larger than 720x1280";
+
+/// A numeric parameter, with the stock firmware's messages for a missing or non-numeric one.
+fn number(params: &Value, name: &str) -> Result<f64, String> {
+    match params.get(name) {
+        None => Err(format!("Missing '{name}' parameter")),
+        Some(Value::Number(n)) => n.as_f64().ok_or_else(|| format!("'{name}' must be a number")),
+        Some(_) => Err(format!("'{name}' must be a number")),
+    }
+}
+
+/// A number as the host wrote it (integers without a decimal point).
+fn shown(value: &Value) -> String {
+    value.to_string()
 }
 
 #[cfg(test)]
@@ -261,7 +362,7 @@ mod tests {
     }
 
     #[test]
-    fn a_picture_that_cannot_be_shown_is_still_answered_so_the_host_does_not_stall() {
+    fn a_picture_that_cannot_be_shown_gets_the_stock_firmwares_error_frame_and_no_echo() {
         let mut d = Device::new(Fake {
             fail_images: true,
             ..Fake::default()
@@ -271,30 +372,79 @@ mod tests {
             cmd: CMD_SHOW_JPG,
             data: vec![0xFF],
         });
-        assert_eq!(out, vec![Frame::image_shown(8)]);
+        assert_eq!(out.len(), 1);
+        assert_eq!((out[0].id, out[0].cmd), (u32::MAX, CMD_JSON));
+        assert_eq!(
+            json_of(&out[0]),
+            json!({ "errorString": IMAGE_ERROR, "requestId": 8 })
+        );
         assert_eq!(d.counters(), (0, 1));
     }
 
     #[test]
-    fn the_backlight_level_is_a_clamped_percentage() {
+    fn the_backlight_level_is_a_percentage_and_is_echoed_like_the_stock_firmware_does() {
         let mut d = Device::new(Fake::default());
-        for (level, want) in [(70, 70u8), (0, 0), (100, 100), (250, 100), (-5, 0)] {
+        for level in [70u8, 0, 100] {
             let out = d.handle(&request(
                 1,
                 json!({ "method": "setBacklight", "parameters": { "level": level } }),
             ));
-            assert_eq!(json_of(&out[0])["success"], true);
-            assert_eq!(*d.hardware().backlight.last().unwrap(), want, "level {level}");
+            assert_eq!(
+                json_of(&out[0]),
+                json!({ "ack_method": "setBacklight", "success": true, "result": level })
+            );
+            assert_eq!(*d.hardware().backlight.last().unwrap(), level);
         }
+        // out of range is an error that says what was sent, and nothing is set
+        let before = d.hardware().backlight.len();
+        for (level, text) in [(300, "got 300"), (-1, "got -1")] {
+            let out = d.handle(&request(
+                2,
+                json!({ "method": "setBacklight", "parameters": { "level": level } }),
+            ));
+            let v = json_of(&out[0]);
+            assert_eq!(v["success"], false);
+            assert_eq!(
+                v["errorString"],
+                format!("Backlight level must be between 0 and 100, {text}")
+            );
+        }
+        assert_eq!(d.hardware().backlight.len(), before);
     }
 
     #[test]
-    fn a_backlight_request_without_a_level_or_with_a_failing_backlight_is_refused() {
+    fn a_backlight_request_without_a_number_or_with_a_failing_backlight_is_refused_in_the_stock_words() {
         let mut d = Device::new(Fake::default());
-        let out = d.handle(&request(1, json!({ "method": "setBacklight", "parameters": {} })));
-        assert_eq!(json_of(&out[0])["success"], false);
-        let out = d.handle(&request(2, json!({ "method": "setBacklight" })));
-        assert_eq!(json_of(&out[0])["success"], false);
+        let error = |d: &mut Device<Fake>, body: Value| {
+            let out = d.handle(&request(1, body));
+            let v = json_of(&out[0]);
+            assert_eq!(v["success"], false);
+            v["errorString"].as_str().unwrap().to_owned()
+        };
+        let missing = "Missing 'level' parameter";
+        assert_eq!(
+            error(&mut d, json!({ "method": "setBacklight", "parameters": {} })),
+            missing
+        );
+        assert_eq!(error(&mut d, json!({ "method": "setBacklight" })), missing);
+        for bad in [json!("high"), json!(null), json!(true)] {
+            assert_eq!(
+                error(
+                    &mut d,
+                    json!({ "method": "setBacklight", "parameters": { "level": bad } })
+                ),
+                "'level' must be a number"
+            );
+        }
+        // parameters that are not an object: no ack_method, as the stock firmware answers
+        let out = d.handle(&request(
+            4,
+            json!({ "method": "setBacklight", "parameters": [1] }),
+        ));
+        assert_eq!(
+            json_of(&out[0]),
+            json!({ "success": false, "errorString": "Field 'parameters' must be an object" })
+        );
 
         let mut d = Device::new(Fake {
             fail_backlight: true,
@@ -356,22 +506,67 @@ mod tests {
     #[test]
     fn the_stock_methods_this_firmware_does_not_have_get_an_error_not_silence() {
         let mut d = Device::new(Fake::default());
-        for m in [
-            "setVolume",
-            "playAudio",
-            "stopAudio",
-            "keyboardInput",
-            "getFilesBySuffix",
-            "saveToFile",
-            "deleteFiles",
-            "setFileCRC",
-        ] {
-            let out = d.handle(&request(9, json!({ "method": m, "parameters": {} })));
+        for m in ["keyboardInput", "saveToFile", "deleteFiles", "setFileCRC"] {
+            let out = d.handle(&request(
+                9,
+                json!({ "method": m, "parameters": { "inputString": "x" } }),
+            ));
             let v = json_of(&out[0]);
             assert_eq!(v["ack_method"], m);
             assert_eq!(v["success"], false);
             assert_eq!(out[0].id, 9);
         }
+    }
+
+    #[test]
+    fn the_audio_and_file_listing_methods_answer_like_a_stock_device_without_files() {
+        let mut d = Device::new(Fake::default());
+        let mut ask = |body: Value| json_of(&d.handle(&request(3, body))[0]);
+        assert_eq!(
+            ask(json!({ "method": "setVolume", "parameters": { "level": 3 } })),
+            json!({ "ack_method": "setVolume", "success": true, "result": 3 })
+        );
+        assert_eq!(
+            ask(json!({ "method": "setVolume", "parameters": { "level": 50 } }))["errorString"],
+            "Volume level must be between 0 and 7, got 50"
+        );
+        assert_eq!(
+            ask(json!({ "method": "stopAudio" })),
+            json!({ "ack_method": "stopAudio", "success": true })
+        );
+        assert_eq!(
+            ask(json!({ "method": "playAudio", "parameters": { "filePath": "/a.mp3" } }))["errorString"],
+            "File does not exist: /a.mp3"
+        );
+        assert_eq!(
+            ask(json!({ "method": "getFilesBySuffix", "parameters": { "suffixs": ["jpg"] } })),
+            json!({ "ack_method": "getFilesBySuffix", "success": true, "result": { "filePaths": [] } })
+        );
+        assert_eq!(
+            ask(json!({ "method": "getFilesBySuffix" }))["errorString"],
+            "Missing 'suffixs' parameter"
+        );
+        assert_eq!(
+            ask(json!({ "method": "keyboardInput" }))["errorString"],
+            "Missing 'inputString' parameter"
+        );
+    }
+
+    #[test]
+    fn an_unknown_method_lists_what_there_is_in_the_stock_format() {
+        let mut d = Device::new(Fake::default());
+        let v = json_of(&d.handle(&request(1, json!({ "method": "noSuchMethod" })))[0]);
+        assert_eq!(
+            v["errorString"],
+            "Unknown method: noSuchMethod. Available methods: [getFilesBySuffix, getInfo, playAudio, setBacklight, setVolume, stopAudio]"
+        );
+        // with the settings backend its methods are listed too, in the same sorted order
+        let mut d = Device::new(Fake::default()).with_settings(Box::new(FakeSettings));
+        let v = json_of(&d.handle(&request(1, json!({ "method": "nope" })))[0]);
+        assert!(v["errorString"]
+            .as_str()
+            .unwrap()
+            .ends_with("[clearWifi, getFilesBySuffix, getInfo, getSettings, playAudio, setBacklight, setHomeAssistant, setVolume, setWifi, stopAudio, testHomeAssistant]"));
     }
 
     #[test]

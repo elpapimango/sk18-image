@@ -15,6 +15,7 @@ Standard library only.
 """
 import argparse
 import binascii
+import glob
 import json
 import os
 import select
@@ -90,6 +91,50 @@ def open_port(path):
     return fd
 
 
+class Link:
+    """The open port; when the device resets itself (it re-enumerates, as /dev/ttyACM<n> with a new n) the probe
+    waits for it to come back, notes that in the log and goes on."""
+
+    def __init__(self, port, write):
+        self.port, self.write_log, self.parser = port, write, Parser()
+        self.fd = open_port(port)
+
+    def send(self, data, label):
+        try:
+            os.write(self.fd, data)
+            return True
+        except OSError as error:
+            self.write_log({"event": "device went away while sending", "before": label, "error": str(error)})
+            self.reopen()
+            return False
+
+    def listen(self, seconds):
+        try:
+            return listen(self.fd, self.parser, seconds)
+        except OSError as error:
+            self.write_log({"event": "device went away while listening", "error": str(error)})
+            self.reopen()
+            return []
+
+    def reopen(self):
+        try:
+            os.close(self.fd)
+        except OSError:
+            pass
+        deadline = time.monotonic() + 20
+        while time.monotonic() < deadline:
+            ports = sorted(glob.glob("/dev/ttyACM*"))
+            if ports:
+                time.sleep(1.0)
+                self.port = ports[-1]
+                self.fd = open_port(self.port)
+                self.parser = Parser()
+                self.write_log({"event": "device is back", "port": self.port})
+                return
+            time.sleep(0.25)
+        raise SystemExit("the device did not come back")
+
+
 def listen(fd, parser, seconds):
     """Frames that arrive within `seconds`, with the time each came at."""
     frames, start = [], time.monotonic()
@@ -135,64 +180,72 @@ PROBES = [
     ("unknown method", "noSuchMethod", None),
     ("getSettings (open firmware only)", "getSettings", None),
     ("method without parameters key", "setVolume", None),
+    ("volume 3", "setVolume", {"level": 3}),
+    ("volume 0", "setVolume", {"level": 0}),
+    ("volume negative", "setVolume", {"level": -1}),
+    ("backlight negative", "setBacklight", {"level": -1}),
+    ("backlight fraction", "setBacklight", {"level": 55.5}),
+    ("backlight null", "setBacklight", {"level": None}),
+    ("backlight bool", "setBacklight", {"level": True}),
+    ("backlight parameters not an object", "setBacklight", [1]),
+    ("play audio missing file", "playAudio", {"filePath": "/nonexistent.mp3"}),
+    ("play audio no path", "playAudio", None),
+    ("files by suffix no parameters", "getFilesBySuffix", None),
+    ("files by suffix empty list", "getFilesBySuffix", {"suffixs": []}),
+    ("keyboard input no parameters", "keyboardInput", None),
+    ("backlight restored to 100", "setBacklight", {"level": 100}),
 ]
 
 
-def probe(port, out_path, touch_seconds):
-    fd = open_port(port)
-    parser = Parser()
+def probe(port, out_path, touch_seconds, touch_only=False):
     log = open(out_path, "w", encoding="utf-8")
 
     def write(entry):
+        entry["t"] = round(time.time(), 3)
         log.write(json.dumps(entry, sort_keys=True) + "\n")
         log.flush()
-        print(json.dumps(entry, sort_keys=True)[:200])
+        print(json.dumps(entry, sort_keys=True)[:200], flush=True)
 
-    listen(fd, parser, 0.3)  # anything the device says unasked
-    leftovers = parser.buf
-    write({"note": "unsolicited bytes before the first request", "raw": binascii.hexlify(leftovers).decode()})
+    link = Link(port, write)
+    if touch_only:
+        print(f"Touch some keys now ({touch_seconds} s)...", flush=True)
+        write({"label": "touch events", "rx": [describe(f) for f in link.listen(touch_seconds)]})
+        return
+    link.listen(0.3)  # anything the device says unasked
+    write({"note": "unsolicited bytes before the first request", "raw": binascii.hexlify(link.parser.buf).decode()})
     fid = 1000
+
+    def ask(label, data, wait, **extra):
+        sent = time.monotonic()
+        ok = link.send(data, label)
+        replies = link.listen(wait) if ok else []
+        entry = {"label": label, "rx": [describe(f) for f in replies], "wall_s": round(time.monotonic() - sent, 3)}
+        entry["ms_to_first"] = replies[0]["ms"] if replies else None
+        entry.update(extra)
+        write(entry)
+
     for label, method, params in PROBES:
         fid += 1
-        data = request(fid, method, params)
-        sent = time.monotonic()
-        os.write(fd, data)
-        replies = listen(fd, parser, 1.5)
-        write(
-            {
-                "label": label,
-                "tx": {"id": fid, "method": method, "parameters": params},
-                "rx": [describe(f) for f in replies],
-                "ms_to_first": replies[0]["ms"] if replies else None,
-                "wall_s": round(time.monotonic() - sent, 3),
-            }
-        )
+        ask(label, request(fid, method, params), 1.5, tx={"id": fid, "method": method, "parameters": params})
+        time.sleep(0.3)
     # A frame with a bad data CRC, then a good one: does the device recover, and does it answer the bad one?
     fid += 1
     bad = bytearray(request(fid, "getInfo"))
     bad[-1] ^= 0xFF
-    os.write(fd, bytes(bad))
-    replies = listen(fd, parser, 1.0)
-    write({"label": "bad data crc", "rx": [describe(f) for f in replies]})
+    ask("bad data crc", bytes(bad), 1.0)
     fid += 1
-    os.write(fd, request(fid, "getInfo"))
-    replies = listen(fd, parser, 1.5)
-    write({"label": "getInfo after the bad frame", "rx": [describe(f) for f in replies]})
+    ask("getInfo after the bad frame", request(fid, "getInfo"), 1.5)
     # Garbage in front of a good frame (the vendor demo sends a megabyte of '0' first).
     fid += 1
-    os.write(fd, b"0" * 4096 + request(fid, "getInfo"))
-    replies = listen(fd, parser, 2.0)
-    write({"label": "4 KiB of '0' before getInfo", "rx": [describe(f) for f in replies]})
+    ask("4 KiB of '0' before getInfo", b"0" * 4096 + request(fid, "getInfo"), 2.0)
     # A tiny picture frame: how is a JPEG answered? (an invalid JPEG; the answer shows whether the echo is sent regardless)
     fid += 1
-    os.write(fd, frame(fid, CMD_JPG, b"\xFF\xD8\xFF\xD9"))
-    replies = listen(fd, parser, 2.0)
-    write({"label": "empty JPEG (SOI+EOI)", "rx": [describe(f) for f in replies]})
+    ask("empty JPEG (SOI+EOI)", frame(fid, CMD_JPG, bytes([0xFF, 0xD8, 0xFF, 0xD9])), 2.0)
     if touch_seconds:
-        print(f"Touch some keys now ({touch_seconds} s)...")
-        replies = listen(fd, parser, touch_seconds)
+        print(f"Touch some keys now ({touch_seconds} s)...", flush=True)
+        replies = link.listen(touch_seconds)
         write({"label": "touch events", "rx": [describe(f) for f in replies]})
-    os.close(fd)
+    os.close(link.fd)
     log.close()
 
 
@@ -230,11 +283,12 @@ if __name__ == "__main__":
     p.add_argument("port")
     p.add_argument("log")
     p.add_argument("--touch-seconds", type=int, default=0)
+    p.add_argument("--touch-only", action="store_true", help="skip the requests, only record key events")
     c = sub.add_parser("compare")
     c.add_argument("a")
     c.add_argument("b")
     args = ap.parse_args()
     if args.mode == "probe":
-        probe(args.port, args.log, args.touch_seconds)
+        probe(args.port, args.log, args.touch_seconds, args.touch_only)
     else:
         compare(args.a, args.b)

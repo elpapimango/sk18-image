@@ -6,6 +6,7 @@ the two logs (compare mode below). Only methods that do not change the device's 
 setFileCRC, deleteFiles, keyboardInput or playAudio.
 
     python3 stock_probe.py probe  /dev/ttyACM0 stock.jsonl [--touch-seconds 20]
+    python3 stock_probe.py probe  tcp:192.168.0.50:7000 esp.jsonl      (a deck on the network, from any OS)
     python3 stock_probe.py compare stock.jsonl open.jsonl
 
 Stop whatever else uses the port first (on the DietPi: `sudo systemctl stop control-deck-gatewayd`).
@@ -19,6 +20,7 @@ import glob
 import json
 import os
 import select
+import socket
 import struct
 import sys
 import time
@@ -80,6 +82,11 @@ class Parser:
 
 
 def open_port(path):
+    if path.startswith("tcp:"):
+        host, _, port = path[4:].rpartition(":")
+        sock = socket.create_connection((host, int(port)), timeout=5)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        return sock
     import termios  # Unix only; the framing code above works anywhere
     import tty
 
@@ -101,7 +108,10 @@ class Link:
 
     def send(self, data, label):
         try:
-            os.write(self.fd, data)
+            if isinstance(self.fd, socket.socket):
+                self.fd.sendall(data)
+            else:
+                os.write(self.fd, data)
             return True
         except OSError as error:
             self.write_log({"event": "device went away while sending", "before": label, "error": str(error)})
@@ -118,12 +128,12 @@ class Link:
 
     def reopen(self):
         try:
-            os.close(self.fd)
+            self.fd.close() if isinstance(self.fd, socket.socket) else os.close(self.fd)
         except OSError:
             pass
         deadline = time.monotonic() + 20
         while time.monotonic() < deadline:
-            ports = sorted(glob.glob("/dev/ttyACM*"))
+            ports = [self.port] if self.port.startswith("tcp:") else sorted(glob.glob("/dev/ttyACM*"))
             if ports:
                 time.sleep(1.0)
                 self.port = ports[-1]
@@ -142,9 +152,11 @@ def listen(fd, parser, seconds):
         ready, _, _ = select.select([fd], [], [], 0.05)
         if ready:
             try:
-                chunk = os.read(fd, 65536)
-            except BlockingIOError:
+                chunk = fd.recv(65536) if isinstance(fd, socket.socket) else os.read(fd, 65536)
+            except (BlockingIOError, socket.timeout):
                 continue
+            if isinstance(fd, socket.socket) and not chunk:
+                raise ConnectionResetError("the deck closed the connection")
             for f in parser.feed(chunk):
                 f["ms"] = round((time.monotonic() - start) * 1000, 1)
                 frames.append(f)
@@ -245,7 +257,7 @@ def probe(port, out_path, touch_seconds, touch_only=False):
         print(f"Touch some keys now ({touch_seconds} s)...", flush=True)
         replies = link.listen(touch_seconds)
         write({"label": "touch events", "rx": [describe(f) for f in replies]})
-    os.close(link.fd)
+    link.fd.close() if isinstance(link.fd, socket.socket) else os.close(link.fd)
     log.close()
 
 

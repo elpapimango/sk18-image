@@ -21,7 +21,7 @@ use crate::settings::Settings;
 /// Model name the host driver checks for (it must start with `SK18`).
 pub const MODEL: &str = "SK18";
 /// Firmware version reported to the host.
-pub const VERSION: &str = "open-0.1.0";
+pub const VERSION: &str = concat!("open-", env!("CARGO_PKG_VERSION"));
 /// Screen width in pixels.
 pub const WIDTH: u32 = 720;
 /// Screen height in pixels.
@@ -74,17 +74,28 @@ pub fn key_event(row: u8, col: u8, pressed: bool) -> Frame {
 }
 
 fn ack(id: u32, method: &str, result: Value) -> Frame {
-    Frame::json(id, &json!({ "ack_method": method, "success": true, "result": result }))
+    Frame::json(
+        id,
+        &json!({ "ack_method": method, "success": true, "result": result }),
+    )
 }
 
 fn nack(id: u32, method: &str, error: &str) -> Frame {
-    Frame::json(id, &json!({ "ack_method": method, "success": false, "errorString": error }))
+    Frame::json(
+        id,
+        &json!({ "ack_method": method, "success": false, "errorString": error }),
+    )
 }
 
 impl<H: Hardware> Device<H> {
     /// A device on top of `hw`.
     pub fn new(hw: H) -> Self {
-        Self { hw, settings: None, shown: 0, failed: 0 }
+        Self {
+            hw,
+            settings: None,
+            shown: 0,
+            failed: 0,
+        }
     }
 
     /// Lets the host read and change the device's settings (Wi-Fi, Home Assistant).
@@ -202,15 +213,30 @@ mod tests {
         assert_eq!(v["success"], true);
         let r = &v["result"];
         assert_eq!(r["deviceModel"], "SK18");
-        assert_eq!((r["deviceWidth"].as_u64(), r["deviceHeight"].as_u64()), (Some(720), Some(1280)));
+        assert_eq!(
+            (r["deviceWidth"].as_u64(), r["deviceHeight"].as_u64()),
+            (Some(720), Some(1280))
+        );
         let panel = &r["devicePanel"];
-        assert_eq!((panel["rectCols"].as_u64(), panel["rectRows"].as_u64()), (Some(3), Some(6)));
+        assert_eq!(
+            (panel["rectCols"].as_u64(), panel["rectRows"].as_u64()),
+            (Some(3), Some(6))
+        );
         let rects = panel["rects"].as_array().unwrap();
         assert_eq!(rects.len(), 18);
         // the first, a middle and the last key rectangle (158 px squares, pitch 218 px)
-        assert_eq!(rects[0], json!({"col":0,"row":0,"isKey":true,"x":61,"y":20,"width":158,"height":158}));
-        assert_eq!(rects[7], json!({"col":1,"row":2,"isKey":true,"x":279,"y":456,"width":158,"height":158}));
-        assert_eq!(rects[17], json!({"col":2,"row":5,"isKey":true,"x":497,"y":1110,"width":158,"height":158}));
+        assert_eq!(
+            rects[0],
+            json!({"col":0,"row":0,"isKey":true,"x":61,"y":20,"width":158,"height":158})
+        );
+        assert_eq!(
+            rects[7],
+            json!({"col":1,"row":2,"isKey":true,"x":279,"y":456,"width":158,"height":158})
+        );
+        assert_eq!(
+            rects[17],
+            json!({"col":2,"row":5,"isKey":true,"x":497,"y":1110,"width":158,"height":158})
+        );
     }
 
     #[test]
@@ -224,7 +250,11 @@ mod tests {
     #[test]
     fn every_image_is_answered_with_an_empty_frame_with_the_same_id() {
         let mut d = Device::new(Fake::default());
-        let out = d.handle(&Frame { id: 77, cmd: CMD_SHOW_JPG, data: vec![1, 2, 3] });
+        let out = d.handle(&Frame {
+            id: 77,
+            cmd: CMD_SHOW_JPG,
+            data: vec![1, 2, 3],
+        });
         assert_eq!(out, vec![Frame::image_shown(77)]);
         assert_eq!(d.hardware().images, vec![3]);
         assert_eq!(d.counters(), (1, 0));
@@ -232,8 +262,15 @@ mod tests {
 
     #[test]
     fn a_picture_that_cannot_be_shown_is_still_answered_so_the_host_does_not_stall() {
-        let mut d = Device::new(Fake { fail_images: true, ..Fake::default() });
-        let out = d.handle(&Frame { id: 8, cmd: CMD_SHOW_JPG, data: vec![0xFF] });
+        let mut d = Device::new(Fake {
+            fail_images: true,
+            ..Fake::default()
+        });
+        let out = d.handle(&Frame {
+            id: 8,
+            cmd: CMD_SHOW_JPG,
+            data: vec![0xFF],
+        });
         assert_eq!(out, vec![Frame::image_shown(8)]);
         assert_eq!(d.counters(), (0, 1));
     }
@@ -242,7 +279,10 @@ mod tests {
     fn the_backlight_level_is_a_clamped_percentage() {
         let mut d = Device::new(Fake::default());
         for (level, want) in [(70, 70u8), (0, 0), (100, 100), (250, 100), (-5, 0)] {
-            let out = d.handle(&request(1, json!({ "method": "setBacklight", "parameters": { "level": level } })));
+            let out = d.handle(&request(
+                1,
+                json!({ "method": "setBacklight", "parameters": { "level": level } }),
+            ));
             assert_eq!(json_of(&out[0])["success"], true);
             assert_eq!(*d.hardware().backlight.last().unwrap(), want, "level {level}");
         }
@@ -256,10 +296,19 @@ mod tests {
         let out = d.handle(&request(2, json!({ "method": "setBacklight" })));
         assert_eq!(json_of(&out[0])["success"], false);
 
-        let mut d = Device::new(Fake { fail_backlight: true, ..Fake::default() });
-        let out = d.handle(&request(3, json!({ "method": "setBacklight", "parameters": { "level": 50 } })));
+        let mut d = Device::new(Fake {
+            fail_backlight: true,
+            ..Fake::default()
+        });
+        let out = d.handle(&request(
+            3,
+            json!({ "method": "setBacklight", "parameters": { "level": 50 } }),
+        ));
         let v = json_of(&out[0]);
-        assert_eq!((v["success"].as_bool(), v["errorString"].as_str()), (Some(false), Some("no backlight")));
+        assert_eq!(
+            (v["success"].as_bool(), v["errorString"].as_str()),
+            (Some(false), Some("no backlight"))
+        );
     }
 
     struct FakeSettings;
@@ -277,10 +326,25 @@ mod tests {
     #[test]
     fn settings_methods_go_to_the_settings_backend_when_there_is_one() {
         let mut d = Device::new(Fake::default()).with_settings(Box::new(FakeSettings));
-        let v = json_of(&d.handle(&request(4, json!({ "method": "getSettings", "parameters": { "a": 1 } })))[0]);
-        assert_eq!((v["ack_method"].as_str(), v["success"].as_bool(), &v["result"]["echo"]["a"]), (Some("getSettings"), Some(true), &json!(1)));
+        let v = json_of(
+            &d.handle(&request(
+                4,
+                json!({ "method": "getSettings", "parameters": { "a": 1 } }),
+            ))[0],
+        );
+        assert_eq!(
+            (
+                v["ack_method"].as_str(),
+                v["success"].as_bool(),
+                &v["result"]["echo"]["a"]
+            ),
+            (Some("getSettings"), Some(true), &json!(1))
+        );
         let v = json_of(&d.handle(&request(5, json!({ "method": "setWifi", "parameters": {} })))[0]);
-        assert_eq!((v["success"].as_bool(), v["errorString"].as_str()), (Some(false), Some("nope")));
+        assert_eq!(
+            (v["success"].as_bool(), v["errorString"].as_str()),
+            (Some(false), Some("nope"))
+        );
         // something that is not a setting is still refused politely, and so are settings without a backend
         let v = json_of(&d.handle(&request(6, json!({ "method": "playAudio" })))[0]);
         assert_eq!(v["success"], false);
@@ -292,7 +356,16 @@ mod tests {
     #[test]
     fn the_stock_methods_this_firmware_does_not_have_get_an_error_not_silence() {
         let mut d = Device::new(Fake::default());
-        for m in ["setVolume", "playAudio", "stopAudio", "keyboardInput", "getFilesBySuffix", "saveToFile", "deleteFiles", "setFileCRC"] {
+        for m in [
+            "setVolume",
+            "playAudio",
+            "stopAudio",
+            "keyboardInput",
+            "getFilesBySuffix",
+            "saveToFile",
+            "deleteFiles",
+            "setFileCRC",
+        ] {
             let out = d.handle(&request(9, json!({ "method": m, "parameters": {} })));
             let v = json_of(&out[0]);
             assert_eq!(v["ack_method"], m);
@@ -304,11 +377,31 @@ mod tests {
     #[test]
     fn things_that_are_not_requests_are_ignored() {
         let mut d = Device::new(Fake::default());
-        assert!(d.handle(&Frame { id: 1, cmd: CMD_JSON, data: b"not json".to_vec() }).is_empty());
-        assert!(d.handle(&Frame { id: 1, cmd: CMD_JSON, data: b"[1,2]".to_vec() }).is_empty());
+        assert!(d
+            .handle(&Frame {
+                id: 1,
+                cmd: CMD_JSON,
+                data: b"not json".to_vec()
+            })
+            .is_empty());
+        assert!(d
+            .handle(&Frame {
+                id: 1,
+                cmd: CMD_JSON,
+                data: b"[1,2]".to_vec()
+            })
+            .is_empty());
         // an acknowledgement from the host has no "method": nothing to answer
-        assert!(d.handle(&request(1, json!({ "ack_method": "x", "success": true }))).is_empty());
-        assert!(d.handle(&Frame { id: 1, cmd: 999, data: vec![] }).is_empty());
+        assert!(d
+            .handle(&request(1, json!({ "ack_method": "x", "success": true })))
+            .is_empty());
+        assert!(d
+            .handle(&Frame {
+                id: 1,
+                cmd: 999,
+                data: vec![]
+            })
+            .is_empty());
     }
 
     #[test]

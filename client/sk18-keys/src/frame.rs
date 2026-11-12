@@ -140,7 +140,12 @@ fn parse(data: &[u8]) -> Option<Frame> {
     }
     let [kind, state, row, col, zero, code] = payload;
     if kind == TYPE_KEY && state <= 1 && row < ROWS && col < COLS && zero == 0 {
-        Some(Frame::Key(KeyEvent { row, col, pressed: state == 1, code }))
+        Some(Frame::Key(KeyEvent {
+            row,
+            col,
+            pressed: state == 1,
+            code,
+        }))
     } else {
         Some(Frame::Unknown(payload))
     }
@@ -149,7 +154,14 @@ fn parse(data: &[u8]) -> Option<Frame> {
 /// Builds the frame the controller would send for a key event. Used by the tests and by tools that
 /// replay events; the controller's own frames are what the decoder is checked against.
 pub fn encode(event: KeyEvent) -> [u8; FRAME_LEN] {
-    let payload = [TYPE_KEY, u8::from(event.pressed), event.row, event.col, 0, event.code];
+    let payload = [
+        TYPE_KEY,
+        u8::from(event.pressed),
+        event.row,
+        event.col,
+        0,
+        event.code,
+    ];
     let sum = payload.iter().fold(0u8, |a, &b| a.wrapping_add(b));
     let mut f = [0u8; FRAME_LEN];
     f[..2].copy_from_slice(&HEADER);
@@ -175,22 +187,46 @@ mod tests {
     }
 
     fn key(row: u8, col: u8, pressed: bool, code: u8) -> KeyEvent {
-        KeyEvent { row, col, pressed, code }
+        KeyEvent {
+            row,
+            col,
+            pressed,
+            code,
+        }
     }
 
     #[test]
     fn real_frames_from_the_device() {
         // The first two frames of the capture: key (5,0) pressed, then released.
-        let a = [0xaa, 0x55, 0x2a, 0x06, 0xf9, 0x16, 0x01, 0x05, 0x00, 0x00, 0x0e, 0xf5, 0x5f];
-        let b = [0xaa, 0x55, 0x29, 0x06, 0xf9, 0x16, 0x00, 0x05, 0x00, 0x00, 0x0e, 0xf5, 0x5f];
+        let a = [
+            0xaa, 0x55, 0x2a, 0x06, 0xf9, 0x16, 0x01, 0x05, 0x00, 0x00, 0x0e, 0xf5, 0x5f,
+        ];
+        let b = [
+            0xaa, 0x55, 0x29, 0x06, 0xf9, 0x16, 0x00, 0x05, 0x00, 0x00, 0x0e, 0xf5, 0x5f,
+        ];
         let (frames, stats) = decode_all(&[&a, &b]);
-        assert_eq!(frames, vec![Frame::Key(key(5, 0, true, 0x0e)), Frame::Key(key(5, 0, false, 0x0e))]);
-        assert_eq!(stats, Stats { frames: 2, unknown_frames: 0, skipped_bytes: 0 });
+        assert_eq!(
+            frames,
+            vec![
+                Frame::Key(key(5, 0, true, 0x0e)),
+                Frame::Key(key(5, 0, false, 0x0e))
+            ]
+        );
+        assert_eq!(
+            stats,
+            Stats {
+                frames: 2,
+                unknown_frames: 0,
+                skipped_bytes: 0
+            }
+        );
     }
 
     #[test]
     fn encode_matches_the_real_frame() {
-        let a = [0xaa, 0x55, 0x2a, 0x06, 0xf9, 0x16, 0x01, 0x05, 0x00, 0x00, 0x0e, 0xf5, 0x5f];
+        let a = [
+            0xaa, 0x55, 0x2a, 0x06, 0xf9, 0x16, 0x01, 0x05, 0x00, 0x00, 0x0e, 0xf5, 0x5f,
+        ];
         assert_eq!(encode(key(5, 0, true, 0x0e)), a);
     }
 
@@ -221,7 +257,13 @@ mod tests {
         s.extend_from_slice(&[0x11, 0x22, 0x33]);
         s.extend_from_slice(&f2);
         let (frames, stats) = decode_all(&[&s]);
-        assert_eq!(frames, vec![Frame::Key(key(1, 2, true, 0x22)), Frame::Key(key(1, 2, false, 0x22))]);
+        assert_eq!(
+            frames,
+            vec![
+                Frame::Key(key(1, 2, true, 0x22)),
+                Frame::Key(key(1, 2, false, 0x22))
+            ]
+        );
         assert_eq!(stats.frames, 2);
         assert_eq!(stats.skipped_bytes, 7);
     }
@@ -256,7 +298,10 @@ mod tests {
             let mut f = base;
             f[idx] = val;
             let (frames, _) = decode_all(&[&f]);
-            assert!(frames.is_empty(), "byte {idx} = {val:#x} must invalidate the frame");
+            assert!(
+                frames.is_empty(),
+                "byte {idx} = {val:#x} must invalidate the frame"
+            );
         }
     }
 

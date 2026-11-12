@@ -48,19 +48,37 @@ fn the_chunk_size_does_not_matter() {
 fn all_eighteen_keys_with_their_codes() {
     // Row-major from the firmware's view: (row, col) -> HID usage, from docs/uart1-key-protocol.md.
     let expected: HashMap<(u8, u8), u8> = [
-        ((0, 0), 0x27), ((0, 1), 0x1e), ((0, 2), 0x1f),
-        ((1, 0), 0x20), ((1, 1), 0x21), ((1, 2), 0x22),
-        ((2, 0), 0x04), ((2, 1), 0x05), ((2, 2), 0x06),
-        ((3, 0), 0x07), ((3, 1), 0x08), ((3, 2), 0x09),
-        ((4, 0), 0x0b), ((4, 1), 0x0c), ((4, 2), 0x0d),
-        ((5, 0), 0x0e), ((5, 1), 0x0f), ((5, 2), 0x10),
+        ((0, 0), 0x27),
+        ((0, 1), 0x1e),
+        ((0, 2), 0x1f),
+        ((1, 0), 0x20),
+        ((1, 1), 0x21),
+        ((1, 2), 0x22),
+        ((2, 0), 0x04),
+        ((2, 1), 0x05),
+        ((2, 2), 0x06),
+        ((3, 0), 0x07),
+        ((3, 1), 0x08),
+        ((3, 2), 0x09),
+        ((4, 0), 0x0b),
+        ((4, 1), 0x0c),
+        ((4, 2), 0x0d),
+        ((5, 0), 0x0e),
+        ((5, 1), 0x0f),
+        ((5, 2), 0x10),
     ]
     .into_iter()
     .collect();
     let (events, _) = decode(64);
     let mut seen = HashSet::new();
     for e in &events {
-        assert_eq!(expected.get(&(e.row, e.col)), Some(&e.code), "key ({},{})", e.row, e.col);
+        assert_eq!(
+            expected.get(&(e.row, e.col)),
+            Some(&e.code),
+            "key ({},{})",
+            e.row,
+            e.col
+        );
         seen.insert((e.row, e.col));
     }
     assert_eq!(seen.len(), 18);
@@ -82,6 +100,9 @@ fn the_logical_grid_of_the_device_as_used_is_fully_covered() {
     let (events, _) = decode(64);
     let o = Orientation::Cw90;
     let (rows, cols) = o.grid();
-    let seen: HashSet<(u8, u8)> = events.iter().map(|e| o.to_logical(e.row, e.col).unwrap()).collect();
+    let seen: HashSet<(u8, u8)> = events
+        .iter()
+        .map(|e| o.to_logical(e.row, e.col).unwrap())
+        .collect();
     assert_eq!(seen.len(), usize::from(rows) * usize::from(cols));
 }

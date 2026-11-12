@@ -76,7 +76,11 @@ mod tests {
         assert_eq!(o.to_logical(0, 0), Some((0, 5)), "red: top right");
         assert_eq!(o.to_logical(5, 0), Some((0, 0)), "blue: top left");
         assert_eq!(o.to_logical(0, 2), Some((2, 5)), "green: bottom right");
-        assert_eq!(o.to_logical(5, 2), Some((2, 0)), "the remaining corner: bottom left");
+        assert_eq!(
+            o.to_logical(5, 2),
+            Some((2, 0)),
+            "the remaining corner: bottom left"
+        );
     }
 
     #[test]
@@ -90,13 +94,21 @@ mod tests {
 
     #[test]
     fn every_orientation_is_a_bijection_onto_its_grid() {
-        for o in [Orientation::Portrait, Orientation::Cw90, Orientation::Cw180, Orientation::Cw270] {
+        for o in [
+            Orientation::Portrait,
+            Orientation::Cw90,
+            Orientation::Cw180,
+            Orientation::Cw270,
+        ] {
             let (rows, cols) = o.grid();
             let mut seen = std::collections::HashSet::new();
             for r in 0..ROWS {
                 for c in 0..COLS {
                     let (lr, lc) = o.to_logical(r, c).unwrap();
-                    assert!(lr < rows && lc < cols, "{o:?}: ({r},{c}) -> ({lr},{lc}) outside {rows}x{cols}");
+                    assert!(
+                        lr < rows && lc < cols,
+                        "{o:?}: ({r},{c}) -> ({lr},{lc}) outside {rows}x{cols}"
+                    );
                     assert!(seen.insert((lr, lc)), "{o:?}: two keys map to ({lr},{lc})");
                 }
             }

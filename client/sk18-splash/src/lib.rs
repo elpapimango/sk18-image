@@ -75,7 +75,11 @@ pub fn hue(deg: f32) -> Rgb {
         4 => (x, 0.0, 1.0),
         _ => (1.0, 0.0, x),
     };
-    [(r * 255.0 + 0.5) as u8, (g * 255.0 + 0.5) as u8, (b * 255.0 + 0.5) as u8]
+    [
+        (r * 255.0 + 0.5) as u8,
+        (g * 255.0 + 0.5) as u8,
+        (b * 255.0 + 0.5) as u8,
+    ]
 }
 
 fn lerp(a: Rgb, b: Rgb, t: f32) -> Rgb {
@@ -116,7 +120,13 @@ pub fn to_native(orientation: Orientation, nw: usize, nh: usize, x: usize, y: us
 }
 
 /// The inverse of [`to_native`]: the logical point shown at native `(x, y)`.
-pub fn to_logical_point(orientation: Orientation, nw: usize, nh: usize, x: usize, y: usize) -> (usize, usize) {
+pub fn to_logical_point(
+    orientation: Orientation,
+    nw: usize,
+    nh: usize,
+    x: usize,
+    y: usize,
+) -> (usize, usize) {
     match orientation {
         Orientation::Portrait => (x, y),
         Orientation::Cw90 => (nh - 1 - y, x),
@@ -179,12 +189,19 @@ pub fn render(s: &mut Surface<'_>, o: Orientation, t: u32) {
             // orientation works), and its measured place on the panel.
             let (ux, uy) = ((c * 2 + 1) * lw / (cols * 2), (r * 2 + 1) * lh / (rows * 2));
             let (nx, ny) = to_native(o, s.width, s.height, ux, uy);
-            let (kc, kr) = ((nx * layout::COLS / s.width).min(layout::COLS - 1), (ny * layout::ROWS / s.height).min(layout::ROWS - 1));
+            let (kc, kr) = (
+                (nx * layout::COLS / s.width).min(layout::COLS - 1),
+                (ny * layout::ROWS / s.height).min(layout::ROWS - 1),
+            );
             let (kcx, kcy) = layout::key_centre(kc, kr);
             // The colour fills the space up to the middle between neighbouring keys (and to the screen's edge).
             let span = |centre: usize, k: usize, count: usize, size: usize| {
                 let lo = if k == 0 { 0 } else { centre - layout::PITCH / 2 };
-                let hi = if k + 1 == count { size } else { centre + layout::PITCH / 2 };
+                let hi = if k + 1 == count {
+                    size
+                } else {
+                    centre + layout::PITCH / 2
+                };
                 (lo, hi)
             };
             let (nx0, nx1) = span(kcx, kc, layout::COLS, s.width);
@@ -200,7 +217,10 @@ pub fn render(s: &mut Surface<'_>, o: Orientation, t: u32) {
                 let ink = lerp(bg, [255, 255, 255], letter_level);
                 let block = block_size(layout::WINDOW, layout::WINDOW);
                 let (cx, cy) = to_logical_point(o, s.width, s.height, kcx, kcy);
-                let (gx, gy) = (cx.saturating_sub(GLYPH_W * block / 2), cy.saturating_sub(GLYPH_H * block / 2));
+                let (gx, gy) = (
+                    cx.saturating_sub(GLYPH_W * block / 2),
+                    cy.saturating_sub(GLYPH_H * block / 2),
+                );
                 for (gr, line) in glyph(letter).iter().enumerate() {
                     for (gc, ch) in line.bytes().enumerate() {
                         if ch == b'#' {
@@ -227,7 +247,12 @@ mod tests {
 
     fn frame(o: Orientation, t: u32) -> Vec<u8> {
         let mut data = buffer();
-        let mut s = Surface { data: &mut data, width: W, height: H, stride: W * 4 };
+        let mut s = Surface {
+            data: &mut data,
+            width: W,
+            height: H,
+            stride: W * 4,
+        };
         render(&mut s, o, t);
         data
     }
@@ -287,7 +312,12 @@ mod tests {
         for r in 0..usize::from(rows) {
             for c in 0..usize::from(cols) {
                 // the centre of the cell, away from the letters' area is not needed at t = 0
-                let colour = at(&d, o, (c * 2 + 1) * lw / (usize::from(cols) * 2), (r * 2 + 1) * lh / (usize::from(rows) * 2));
+                let colour = at(
+                    &d,
+                    o,
+                    (c * 2 + 1) * lw / (usize::from(cols) * 2),
+                    (r * 2 + 1) * lh / (usize::from(rows) * 2),
+                );
                 assert!(colour != [0, 0, 0], "cell ({r},{c}) is black");
                 seen.insert(colour);
             }
@@ -354,7 +384,10 @@ mod tests {
                 if at(&d, o, x, y) == [255, 255, 255] {
                     let (r, c) = (y * rows / lh, x * cols / lw);
                     assert_eq!(r, 1, "lit pixel outside the middle row at ({x},{y})");
-                    assert!((1..=4).contains(&c), "lit pixel outside columns 1..4 at ({x},{y})");
+                    assert!(
+                        (1..=4).contains(&c),
+                        "lit pixel outside columns 1..4 at ({x},{y})"
+                    );
                 }
             }
         }
@@ -381,7 +414,7 @@ mod tests {
     fn halfway_through_the_fade_the_keys_are_dimmed_and_the_letters_half_lit() {
         let o = Orientation::Cw90;
         let d = frame(o, 800); // the middle of 500..1100
-        // a key that is not a letter key: half of its colour (smoothstep(0.5) = 0.5)
+                               // a key that is not a letter key: half of its colour (smoothstep(0.5) = 0.5)
         let want = lerp([0, 0, 0], key_colour(0, 18), 0.5);
         assert_eq!(at(&d, o, 10, 10), want);
         // the letter blocks are half way between the (dimmed) key colour and white
@@ -394,12 +427,21 @@ mod tests {
 
     #[test]
     fn every_orientation_covers_the_buffer_without_panicking() {
-        for o in [Orientation::Portrait, Orientation::Cw90, Orientation::Cw180, Orientation::Cw270] {
+        for o in [
+            Orientation::Portrait,
+            Orientation::Cw90,
+            Orientation::Cw180,
+            Orientation::Cw270,
+        ] {
             for t in [0, 499, 500, 800, 1100, 1300, 1600, 1800, 2000, 5000] {
                 let d = frame(o, t);
                 assert!(d.chunks(4).all(|p| p[3] == 0xAA || p[3] == 0), "{o:?} at {t}");
                 // no pixel keeps the 0xAA fill in all three colour bytes
-                assert!(d.chunks(4).all(|p| !(p[0] == 0xAA && p[1] == 0xAA && p[2] == 0xAA)), "{o:?} at {t}");
+                assert!(
+                    d.chunks(4)
+                        .all(|p| !(p[0] == 0xAA && p[1] == 0xAA && p[2] == 0xAA)),
+                    "{o:?} at {t}"
+                );
             }
         }
     }
@@ -408,11 +450,21 @@ mod tests {
     fn a_stride_larger_than_the_row_is_respected() {
         let stride = W * 4 + 64;
         let mut data = vec![0x55u8; stride * H];
-        let mut s = Surface { data: &mut data, width: W, height: H, stride };
+        let mut s = Surface {
+            data: &mut data,
+            width: W,
+            height: H,
+            stride,
+        };
         render(&mut s, Orientation::Cw90, 0);
         // the padding at the end of each row is untouched
         for y in 0..H {
-            assert!(data[y * stride + W * 4..(y + 1) * stride].iter().all(|&b| b == 0x55), "row {y} padding");
+            assert!(
+                data[y * stride + W * 4..(y + 1) * stride]
+                    .iter()
+                    .all(|&b| b == 0x55),
+                "row {y} padding"
+            );
         }
     }
 }

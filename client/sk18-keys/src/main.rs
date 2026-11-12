@@ -23,7 +23,11 @@ struct Options {
 }
 
 fn parse_args() -> Result<Option<Options>, String> {
-    let mut o = Options { port: PathBuf::from("/dev/ttyS0"), orientation: Orientation::default(), file: None };
+    let mut o = Options {
+        port: PathBuf::from("/dev/ttyS0"),
+        orientation: Orientation::default(),
+        file: None,
+    };
     let mut args = std::env::args().skip(1);
     while let Some(a) = args.next() {
         let mut value = |name: &str| args.next().ok_or_else(|| format!("{name} needs a value"));
@@ -55,7 +59,12 @@ fn parse_hex(text: &str) -> Result<Vec<u8>, String> {
 
 fn print_frame(out: &mut impl Write, orientation: Orientation, frame: Frame) -> io::Result<()> {
     match frame {
-        Frame::Key(KeyEvent { row, col, pressed, code }) => {
+        Frame::Key(KeyEvent {
+            row,
+            col,
+            pressed,
+            code,
+        }) => {
             let (lr, lc) = orientation.to_logical(row, col).unwrap_or((u8::MAX, u8::MAX));
             writeln!(
                 out,
@@ -69,7 +78,11 @@ fn print_frame(out: &mut impl Write, orientation: Orientation, frame: Frame) -> 
 }
 
 fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" ")
+    bytes
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Where the decoded events go; remembers the first write error so the read loop can stop.
@@ -91,7 +104,11 @@ impl<W: Write> Sink<W> {
 
 fn run(o: &Options) -> Result<(), String> {
     let mut dec = Decoder::new();
-    let mut sink = Sink { out: io::stdout().lock(), orientation: o.orientation, error: None };
+    let mut sink = Sink {
+        out: io::stdout().lock(),
+        orientation: o.orientation,
+        error: None,
+    };
 
     if let Some(path) = &o.file {
         let raw = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -102,16 +119,30 @@ fn run(o: &Options) -> Result<(), String> {
         };
         dec.push(&bytes, |f| sink.emit(f));
         let s = dec.stats();
-        eprintln!("{} bytes, {} frames ({} unknown), {} bytes skipped", bytes.len(), s.frames, s.unknown_frames, s.skipped_bytes);
+        eprintln!(
+            "{} bytes, {} frames ({} unknown), {} bytes skipped",
+            bytes.len(),
+            s.frames,
+            s.unknown_frames,
+            s.skipped_bytes
+        );
     } else {
         #[cfg(unix)]
         {
             use std::io::Read;
-            let mut port = sk18_keys::port::open_port(&o.port).map_err(|e| format!("{}: {e}", o.port.display()))?;
-            eprintln!("reading {} at {} baud, orientation {:?}", o.port.display(), sk18_keys::port::BAUD, o.orientation);
+            let mut port =
+                sk18_keys::port::open_port(&o.port).map_err(|e| format!("{}: {e}", o.port.display()))?;
+            eprintln!(
+                "reading {} at {} baud, orientation {:?}",
+                o.port.display(),
+                sk18_keys::port::BAUD,
+                o.orientation
+            );
             let mut buf = [0u8; 256];
             loop {
-                let n = port.read(&mut buf).map_err(|e| format!("{}: {e}", o.port.display()))?;
+                let n = port
+                    .read(&mut buf)
+                    .map_err(|e| format!("{}: {e}", o.port.display()))?;
                 if n == 0 {
                     break;
                 }

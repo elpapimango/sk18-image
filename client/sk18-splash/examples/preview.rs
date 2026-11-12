@@ -11,14 +11,22 @@ use sk18_splash::{logical_size, render, to_native, Surface};
 fn main() {
     let mut args = std::env::args().skip(1);
     let out = PathBuf::from(args.next().expect("usage: preview OUT_DIR [orientation]"));
-    let o = args.next().and_then(|a| Orientation::parse(&a)).unwrap_or_default();
+    let o = args
+        .next()
+        .and_then(|a| Orientation::parse(&a))
+        .unwrap_or_default();
     fs::create_dir_all(&out).unwrap();
 
     let (w, h) = (720usize, 1280usize);
     let (lw, lh) = logical_size(o, w, h);
     for t in [0u32, 250, 550, 800, 1050, 1300, 1700, 1900, 2000] {
         let mut native = vec![0u8; w * h * 4];
-        let mut s = Surface { data: &mut native, width: w, height: h, stride: w * 4 };
+        let mut s = Surface {
+            data: &mut native,
+            width: w,
+            height: h,
+            stride: w * 4,
+        };
         render(&mut s, o, t);
 
         let mut ppm = format!("P6\n{lw} {lh}\n255\n").into_bytes();

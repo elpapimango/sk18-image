@@ -39,7 +39,11 @@ pub struct HidPort {
 
 impl HidPort {
     pub fn new(file: File) -> Self {
-        Self { file, pending: Vec::new(), taken: 0 }
+        Self {
+            file,
+            pending: Vec::new(),
+            taken: 0,
+        }
     }
 
     /// A second handle for writing from another thread. Only the original reads.

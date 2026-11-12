@@ -7,10 +7,10 @@
 pub mod device;
 pub mod display;
 pub mod ha;
-pub mod protocol;
-pub mod settings;
-#[cfg(unix)]
-pub mod hw;
 pub mod hid;
 #[cfg(unix)]
+pub mod hw;
+pub mod protocol;
+#[cfg(unix)]
 pub mod serial;
+pub mod settings;

@@ -4,15 +4,19 @@ use std::fs::File;
 use std::io;
 use std::path::Path;
 
-use rustix::fs::{open, Mode, OFlags};
 use rustix::event::{poll, PollFd, PollFlags};
+use rustix::fs::{open, Mode, OFlags};
 use rustix::termios::{tcgetattr, tcsetattr, ControlModes, OptionalActions, SpecialCodeIndex};
 use rustix::time::Timespec;
 
 /// Opens `path` read/write as a raw port: no echo, no newline translation, no flow control, reads return as soon as
 /// one byte is there. The baud rate is irrelevant on a USB gadget.
 pub fn open_raw(path: &Path) -> io::Result<File> {
-    let fd = open(path, OFlags::RDWR | OFlags::NOCTTY | OFlags::CLOEXEC, Mode::empty())?;
+    let fd = open(
+        path,
+        OFlags::RDWR | OFlags::NOCTTY | OFlags::CLOEXEC,
+        Mode::empty(),
+    )?;
     let mut t = tcgetattr(&fd)?;
     t.make_raw();
     t.control_modes.insert(ControlModes::CLOCAL | ControlModes::CREAD);
@@ -25,7 +29,10 @@ pub fn open_raw(path: &Path) -> io::Result<File> {
 
 /// Waits up to `ms` milliseconds for something to read (or for the host to hang up, which also counts as readable).
 pub fn wait_readable(port: &File, ms: i64) -> io::Result<bool> {
-    let timeout = Timespec { tv_sec: ms / 1000, tv_nsec: (ms % 1000) * 1_000_000 };
+    let timeout = Timespec {
+        tv_sec: ms / 1000,
+        tv_nsec: (ms % 1000) * 1_000_000,
+    };
     let mut fds = [PollFd::new(port, PollFlags::IN)];
     Ok(poll(&mut fds, Some(&timeout))? > 0)
 }

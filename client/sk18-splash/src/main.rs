@@ -34,7 +34,11 @@ fn parse_args() -> Result<Option<Options>, String> {
             "--backlight" => o.backlight = value("--backlight")?,
             "--brightness" => {
                 let v = value("--brightness")?;
-                o.brightness = v.parse::<u32>().ok().filter(|b| *b <= 255).ok_or_else(|| format!("bad brightness {v:?}"))?;
+                o.brightness = v
+                    .parse::<u32>()
+                    .ok()
+                    .filter(|b| *b <= 255)
+                    .ok_or_else(|| format!("bad brightness {v:?}"))?;
             }
             "--orientation" => {
                 let v = value("--orientation")?;
@@ -58,7 +62,10 @@ fn run(o: &Options) -> Result<(), String> {
     const FRAME: Duration = Duration::from_millis(33);
 
     // Size and layout of the framebuffer, from sysfs (no ioctl needed).
-    let name = Path::new(&o.fb).file_name().and_then(|n| n.to_str()).ok_or("bad framebuffer path")?;
+    let name = Path::new(&o.fb)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("bad framebuffer path")?;
 
     // The display driver may still be finishing its probe when init starts this program: wait up to 5 s for the
     // framebuffer, its sysfs entries and the backlight. After that the real error comes from the reads below.
@@ -72,26 +79,42 @@ fn run(o: &Options) -> Result<(), String> {
         std::thread::sleep(Duration::from_millis(50));
     }
 
-    let info =|file: &str| -> Result<String, String> {
+    let info = |file: &str| -> Result<String, String> {
         let p = format!("/sys/class/graphics/{name}/{file}");
-        fs::read_to_string(&p).map(|s| s.trim().to_string()).map_err(|e| format!("{p}: {e}"))
+        fs::read_to_string(&p)
+            .map(|s| s.trim().to_string())
+            .map_err(|e| format!("{p}: {e}"))
     };
     let size = info("virtual_size")?;
-    let (w, h) = size.split_once(',').ok_or_else(|| format!("unexpected virtual_size {size:?}"))?;
+    let (w, h) = size
+        .split_once(',')
+        .ok_or_else(|| format!("unexpected virtual_size {size:?}"))?;
     let (width, height): (usize, usize) = (
         w.parse().map_err(|_| format!("bad width {w:?}"))?,
         h.parse().map_err(|_| format!("bad height {h:?}"))?,
     );
-    let bpp: usize = info("bits_per_pixel")?.parse().map_err(|_| "bad bits_per_pixel".to_string())?;
+    let bpp: usize = info("bits_per_pixel")?
+        .parse()
+        .map_err(|_| "bad bits_per_pixel".to_string())?;
     let stride: usize = info("stride")?.parse().map_err(|_| "bad stride".to_string())?;
     if bpp != 32 || stride < width * 4 {
-        return Err(format!("unsupported framebuffer: {width}x{height}, {bpp} bpp, stride {stride}"));
+        return Err(format!(
+            "unsupported framebuffer: {width}x{height}, {bpp} bpp, stride {stride}"
+        ));
     }
 
-    let fb = OpenOptions::new().write(true).open(&o.fb).map_err(|e| format!("{}: {e}", o.fb))?;
+    let fb = OpenOptions::new()
+        .write(true)
+        .open(&o.fb)
+        .map_err(|e| format!("{}: {e}", o.fb))?;
     let mut buf = vec![0u8; stride * height];
     let mut draw = |t: u32| -> Result<(), String> {
-        let mut s = Surface { data: &mut buf, width, height, stride };
+        let mut s = Surface {
+            data: &mut buf,
+            width,
+            height,
+            stride,
+        };
         render(&mut s, o.orientation, t);
         fb.write_all_at(&buf, 0).map_err(|e| format!("{}: {e}", o.fb))
     };

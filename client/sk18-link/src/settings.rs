@@ -17,8 +17,8 @@ use std::process::{Command, Stdio};
 
 use serde_json::{json, Value};
 
-use crate::ha::{self, HaConfig};
 pub use crate::ha::SharedHa;
+use crate::ha::{self, HaConfig};
 
 /// The Wi-Fi interface of the board.
 pub const WLAN: &str = "wlan0";
@@ -51,19 +51,27 @@ impl System for LinuxSystem {
     fn run(&self, program: &str, args: &[&str], stdin: Option<&str>) -> Result<String, String> {
         let mut child = Command::new(program)
             .args(args)
-            .stdin(if stdin.is_some() { Stdio::piped() } else { Stdio::null() })
+            .stdin(if stdin.is_some() {
+                Stdio::piped()
+            } else {
+                Stdio::null()
+            })
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| format!("{program}: {e}"))?;
         if let (Some(text), Some(mut pipe)) = (stdin, child.stdin.take()) {
-            pipe.write_all(text.as_bytes()).map_err(|e| format!("{program}: {e}"))?;
+            pipe.write_all(text.as_bytes())
+                .map_err(|e| format!("{program}: {e}"))?;
         }
         let out = child.wait_with_output().map_err(|e| format!("{program}: {e}"))?;
         if out.status.success() {
             Ok(String::from_utf8_lossy(&out.stdout).into_owned())
         } else {
-            Err(format!("{program}: {}", String::from_utf8_lossy(&out.stderr).trim()))
+            Err(format!(
+                "{program}: {}",
+                String::from_utf8_lossy(&out.stderr).trim()
+            ))
         }
     }
 
@@ -135,7 +143,12 @@ impl WifiNetwork {
                 }
             }
         }
-        Some(Self { ssid: ssid?, psk: psk?, country, hidden })
+        Some(Self {
+            ssid: ssid?,
+            psk: psk?,
+            country,
+            hidden,
+        })
     }
 
     /// The name for display (lossy for non-UTF-8 names).
@@ -148,7 +161,10 @@ fn unhex(text: &str) -> Option<Vec<u8>> {
     if text.len() % 2 != 0 || !text.is_ascii() {
         return None;
     }
-    (0..text.len()).step_by(2).map(|i| u8::from_str_radix(&text[i..i + 2], 16).ok()).collect()
+    (0..text.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(&text[i..i + 2], 16).ok())
+        .collect()
 }
 
 fn is_hex64(text: &str) -> bool {
@@ -178,7 +194,9 @@ pub fn parse_status(text: &str) -> LinkStatus {
 }
 
 fn signal_dbm(text: &str) -> Option<i64> {
-    text.lines().find_map(|l| l.strip_prefix("RSSI=")).and_then(|v| v.trim().parse().ok())
+    text.lines()
+        .find_map(|l| l.strip_prefix("RSSI="))
+        .and_then(|v| v.trim().parse().ok())
 }
 
 /// The real settings of the board, or a fake system in the tests.
@@ -192,7 +210,12 @@ pub struct SystemSettings<S> {
 impl<S: System> SystemSettings<S> {
     /// Uses the given files; loads the saved Home Assistant access into `ha` (which the key sender shares).
     pub fn new(system: S, wpa_conf: impl Into<PathBuf>, ha_conf: impl Into<PathBuf>, ha: SharedHa) -> Self {
-        let this = Self { system, wpa_conf: wpa_conf.into(), ha_conf: ha_conf.into(), ha };
+        let this = Self {
+            system,
+            wpa_conf: wpa_conf.into(),
+            ha_conf: ha_conf.into(),
+            ha,
+        };
         *this.ha.write().expect("ha lock") = this.load_ha();
         this
     }
@@ -206,7 +229,9 @@ impl<S: System> SystemSettings<S> {
     }
 
     fn network(&self) -> Option<WifiNetwork> {
-        std::fs::read_to_string(&self.wpa_conf).ok().and_then(|t| WifiNetwork::parse(&t))
+        std::fs::read_to_string(&self.wpa_conf)
+            .ok()
+            .and_then(|t| WifiNetwork::parse(&t))
     }
 
     /// Writes a secret file through a temporary one, readable by root only.
@@ -219,8 +244,11 @@ impl<S: System> SystemSettings<S> {
             use std::os::unix::fs::OpenOptionsExt;
             options.mode(0o600);
         }
-        let mut file = options.open(&temporary).map_err(|e| format!("{}: {e}", temporary.display()))?;
-        file.write_all(text.as_bytes()).map_err(|e| format!("{}: {e}", temporary.display()))?;
+        let mut file = options
+            .open(&temporary)
+            .map_err(|e| format!("{}: {e}", temporary.display()))?;
+        file.write_all(text.as_bytes())
+            .map_err(|e| format!("{}: {e}", temporary.display()))?;
         file.sync_all().ok();
         std::fs::rename(&temporary, path).map_err(|e| format!("{}: {e}", path.display()))
     }
@@ -275,7 +303,9 @@ impl<S: System> SystemSettings<S> {
             return Ok(passphrase.to_ascii_lowercase());
         }
         if !(8..=63).contains(&passphrase.len()) || !passphrase.bytes().all(|b| (32..=126).contains(&b)) {
-            return Err("a Wi-Fi password has 8 to 63 characters (letters, digits and symbols, no accents)".into());
+            return Err(
+                "a Wi-Fi password has 8 to 63 characters (letters, digits and symbols, no accents)".into(),
+            );
         }
         let out = self.system.run("wpa_passphrase", &[ssid], Some(passphrase))?;
         out.lines()
@@ -305,7 +335,12 @@ impl<S: System> SystemSettings<S> {
         } else {
             self.derive_psk(ssid, passphrase)?
         };
-        let network = WifiNetwork { ssid: ssid.as_bytes().to_vec(), psk, country, hidden };
+        let network = WifiNetwork {
+            ssid: ssid.as_bytes().to_vec(),
+            psk,
+            country,
+            hidden,
+        };
         Self::write_private(&self.wpa_conf, &network.render())?;
         self.apply_wifi();
         Ok(self.get_settings())
@@ -313,7 +348,12 @@ impl<S: System> SystemSettings<S> {
 
     /// Makes the running `wpa_supplicant` read the file, or starts the interface when nothing is running yet.
     fn apply_wifi(&self) {
-        if self.system.run("wpa_cli", &["-i", WLAN, "reconfigure"], None).is_err() && self.system.interface_present(WLAN) {
+        if self
+            .system
+            .run("wpa_cli", &["-i", WLAN, "reconfigure"], None)
+            .is_err()
+            && self.system.interface_present(WLAN)
+        {
             self.system.spawn_detached("/sbin/ifup", &[WLAN]);
         }
     }
@@ -341,9 +381,16 @@ impl<S: System> SystemSettings<S> {
             config.url = url.to_owned();
         }
         if let Some(event) = text("event") {
-            let event = if event.trim().is_empty() { ha::DEFAULT_EVENT } else { event.trim() };
+            let event = if event.trim().is_empty() {
+                ha::DEFAULT_EVENT
+            } else {
+                event.trim()
+            };
             if !ha::valid_event(event) {
-                return Err("the event name may only contain letters, digits and _, and must start with a letter".into());
+                return Err(
+                    "the event name may only contain letters, digits and _, and must start with a letter"
+                        .into(),
+                );
             }
             config.event = event.to_owned();
         }
@@ -356,7 +403,10 @@ impl<S: System> SystemSettings<S> {
         if params.get("clear_token").and_then(Value::as_bool) == Some(true) {
             config.token.clear();
         }
-        config.enabled = params.get("enabled").and_then(Value::as_bool).unwrap_or(config.enabled);
+        config.enabled = params
+            .get("enabled")
+            .and_then(Value::as_bool)
+            .unwrap_or(config.enabled);
         if config.enabled && (config.url.is_empty() || config.token.is_empty()) {
             return Err("to send events, Home Assistant needs an address and an access token".into());
         }
@@ -367,10 +417,18 @@ impl<S: System> SystemSettings<S> {
 
     fn test_home_assistant(&self, params: &Value) -> Result<Value, String> {
         let mut config = self.ha.read().expect("ha lock").clone();
-        if let Some(url) = params.get("url").and_then(Value::as_str).filter(|u| !u.trim().is_empty()) {
+        if let Some(url) = params
+            .get("url")
+            .and_then(Value::as_str)
+            .filter(|u| !u.trim().is_empty())
+        {
             config.url = url.trim().to_owned();
         }
-        if let Some(token) = params.get("token").and_then(Value::as_str).filter(|t| !t.is_empty()) {
+        if let Some(token) = params
+            .get("token")
+            .and_then(Value::as_str)
+            .filter(|t| !t.is_empty())
+        {
             config.token = token.to_owned();
         }
         ha::check(&config).map(|message| json!({ "message": message }))
@@ -407,9 +465,14 @@ mod tests {
 
     impl System for &FakeSystem {
         fn run(&self, program: &str, args: &[&str], stdin: Option<&str>) -> Result<String, String> {
-            self.calls.borrow_mut().push(format!("{program} {} <{}>", args.join(" "), stdin.unwrap_or("")));
+            self.calls
+                .borrow_mut()
+                .push(format!("{program} {} <{}>", args.join(" "), stdin.unwrap_or("")));
             match (program, args) {
-                ("wpa_passphrase", _) => Ok("network={\n\tssid=\"x\"\n\t#psk=\"hunter2hunter2\"\n\tpsk=".to_owned() + &"ab".repeat(32) + "\n}\n"),
+                ("wpa_passphrase", _) => Ok("network={\n\tssid=\"x\"\n\t#psk=\"hunter2hunter2\"\n\tpsk="
+                    .to_owned()
+                    + &"ab".repeat(32)
+                    + "\n}\n"),
                 ("wpa_cli", [_, _, "status"]) if self.supplicant_running => Ok(self.status.clone()),
                 ("wpa_cli", [_, _, "signal_poll"]) => Ok("RSSI=-58\nLINKSPEED=65\n".into()),
                 ("wpa_cli", [_, _, "reconfigure"]) if self.supplicant_running => Ok("OK\n".into()),
@@ -418,7 +481,9 @@ mod tests {
         }
 
         fn spawn_detached(&self, program: &str, args: &[&str]) {
-            self.detached.borrow_mut().push(format!("{program} {}", args.join(" ")));
+            self.detached
+                .borrow_mut()
+                .push(format!("{program} {}", args.join(" ")));
         }
 
         fn interface_present(&self, _: &str) -> bool {
@@ -428,13 +493,22 @@ mod tests {
 
     fn scratch() -> PathBuf {
         static N: AtomicU32 = AtomicU32::new(0);
-        let dir = std::env::temp_dir().join(format!("sk18-settings-{}-{}", std::process::id(), N.fetch_add(1, Ordering::SeqCst)));
+        let dir = std::env::temp_dir().join(format!(
+            "sk18-settings-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::SeqCst)
+        ));
         std::fs::create_dir_all(&dir).unwrap();
         dir
     }
 
     fn settings<'a>(system: &'a FakeSystem, dir: &Path) -> SystemSettings<&'a FakeSystem> {
-        SystemSettings::new(system, dir.join("wpa.conf"), dir.join("ha.json"), SharedHa::default())
+        SystemSettings::new(
+            system,
+            dir.join("wpa.conf"),
+            dir.join("ha.json"),
+            SharedHa::default(),
+        )
     }
 
     fn up() -> FakeSystem {
@@ -452,11 +526,19 @@ mod tests {
 
     #[test]
     fn the_stored_network_survives_a_round_trip_and_reads_the_provisioning_scripts_file() {
-        let network = WifiNetwork { ssid: "Café ✓".as_bytes().to_vec(), psk: "cd".repeat(32), country: "DE".into(), hidden: true };
+        let network = WifiNetwork {
+            ssid: "Café ✓".as_bytes().to_vec(),
+            psk: "cd".repeat(32),
+            country: "DE".into(),
+            hidden: true,
+        };
         assert_eq!(WifiNetwork::parse(&network.render()), Some(network));
         let provisioned = format!("ctrl_interface=/run/wpa_supplicant\nupdate_config=0\ncountry=GB\nnetwork={{\n\tssid=486f6d65\n\tkey_mgmt=WPA-PSK\n\tpsk={}\n}}\n", "ef".repeat(32));
         let parsed = WifiNetwork::parse(&provisioned).unwrap();
-        assert_eq!((parsed.name().as_str(), parsed.country.as_str(), parsed.hidden), ("Home", "GB", false));
+        assert_eq!(
+            (parsed.name().as_str(), parsed.country.as_str(), parsed.hidden),
+            ("Home", "GB", false)
+        );
         assert!(WifiNetwork::parse("country=DE\n").is_none());
     }
 
@@ -467,30 +549,60 @@ mod tests {
         let got = s.call("setWifi", &set_wifi_params()).unwrap().unwrap();
         let file = std::fs::read_to_string(dir.join("wpa.conf")).unwrap();
         assert!(!file.contains("correct horse"), "{file}");
-        assert!(file.contains(&"ab".repeat(32)) && file.contains("country=DE") && file.contains("scan_ssid=1"), "{file}");
-        assert!(system.calls.borrow().iter().any(|c| c == "wpa_passphrase Home <correct horse>"));
-        assert!(system.calls.borrow().iter().any(|c| c.starts_with("wpa_cli -i wlan0 reconfigure")));
+        assert!(
+            file.contains(&"ab".repeat(32)) && file.contains("country=DE") && file.contains("scan_ssid=1"),
+            "{file}"
+        );
+        assert!(system
+            .calls
+            .borrow()
+            .iter()
+            .any(|c| c == "wpa_passphrase Home <correct horse>"));
+        assert!(system
+            .calls
+            .borrow()
+            .iter()
+            .any(|c| c.starts_with("wpa_cli -i wlan0 reconfigure")));
         assert_eq!(got["wifi"]["ssid"], "Home");
         assert_eq!(got["wifi"]["state"], "connected");
         assert_eq!(got["wifi"]["ip"], "192.168.0.124");
         assert_eq!(got["wifi"]["signal_dbm"], -58);
-        assert!(!got.to_string().contains(&"ab".repeat(32)), "the key must not be reported");
+        assert!(
+            !got.to_string().contains(&"ab".repeat(32)),
+            "the key must not be reported"
+        );
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            assert_eq!(std::fs::metadata(dir.join("wpa.conf")).unwrap().permissions().mode() & 0o777, 0o600);
+            assert_eq!(
+                std::fs::metadata(dir.join("wpa.conf"))
+                    .unwrap()
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600
+            );
         }
     }
 
     #[test]
     fn without_a_running_supplicant_the_interface_is_started() {
-        let system = FakeSystem { adapter: true, ..FakeSystem::default() };
+        let system = FakeSystem {
+            adapter: true,
+            ..FakeSystem::default()
+        };
         let dir = scratch();
-        settings(&system, &dir).call("setWifi", &set_wifi_params()).unwrap().unwrap();
+        settings(&system, &dir)
+            .call("setWifi", &set_wifi_params())
+            .unwrap()
+            .unwrap();
         assert_eq!(*system.detached.borrow(), vec!["/sbin/ifup wlan0".to_owned()]);
         // no adapter: nothing to start, and the state says why
         let system = FakeSystem::default();
-        let got = settings(&system, &dir).call("getSettings", &Value::Null).unwrap().unwrap();
+        let got = settings(&system, &dir)
+            .call("getSettings", &Value::Null)
+            .unwrap()
+            .unwrap();
         assert_eq!(got["wifi"]["state"], "no-adapter");
     }
 
@@ -502,10 +614,17 @@ mod tests {
         let edit = json!({ "ssid": "Home", "country": "GB", "hidden": false });
         s.call("setWifi", &edit).unwrap().unwrap();
         let file = std::fs::read_to_string(dir.join("wpa.conf")).unwrap();
-        assert!(file.contains(&"ab".repeat(32)) && file.contains("country=GB") && !file.contains("scan_ssid"), "{file}");
+        assert!(
+            file.contains(&"ab".repeat(32)) && file.contains("country=GB") && !file.contains("scan_ssid"),
+            "{file}"
+        );
         // another network needs its password
         let other = json!({ "ssid": "Other", "country": "GB" });
-        assert!(s.call("setWifi", &other).unwrap().unwrap_err().contains("password"));
+        assert!(s
+            .call("setWifi", &other)
+            .unwrap()
+            .unwrap_err()
+            .contains("password"));
     }
 
     #[test]
@@ -529,9 +648,21 @@ mod tests {
     fn a_raw_64_digit_key_is_taken_as_it_is() {
         let (system, dir) = (up(), scratch());
         let key = "A1".repeat(32);
-        settings(&system, &dir).call("setWifi", &json!({ "ssid": "Home", "passphrase": key, "country": "DE" })).unwrap().unwrap();
-        assert!(std::fs::read_to_string(dir.join("wpa.conf")).unwrap().contains(&"a1".repeat(32)));
-        assert!(!system.calls.borrow().iter().any(|c| c.starts_with("wpa_passphrase")));
+        settings(&system, &dir)
+            .call(
+                "setWifi",
+                &json!({ "ssid": "Home", "passphrase": key, "country": "DE" }),
+            )
+            .unwrap()
+            .unwrap();
+        assert!(std::fs::read_to_string(dir.join("wpa.conf"))
+            .unwrap()
+            .contains(&"a1".repeat(32)));
+        assert!(!system
+            .calls
+            .borrow()
+            .iter()
+            .any(|c| c.starts_with("wpa_passphrase")));
     }
 
     #[test]
@@ -555,10 +686,17 @@ mod tests {
             ("wpa_state=4WAY_HANDSHAKE\n", "connecting"),
             ("wpa_state=DISCONNECTED\n", "disconnected"),
         ] {
-            let system = FakeSystem { status: status.into(), ..up() };
+            let system = FakeSystem {
+                status: status.into(),
+                ..up()
+            };
             let mut s = settings(&system, &dir);
             s.call("setWifi", &set_wifi_params()).unwrap().unwrap();
-            assert_eq!(s.call("getSettings", &Value::Null).unwrap().unwrap()["wifi"]["state"], want, "{status}");
+            assert_eq!(
+                s.call("getSettings", &Value::Null).unwrap().unwrap()["wifi"]["state"],
+                want,
+                "{status}"
+            );
         }
     }
 
@@ -571,15 +709,25 @@ mod tests {
             .call("setHomeAssistant", &json!({ "enabled": true, "url": "http://homeassistant.local:8123", "token": "abc.def", "event": "deck" }))
             .unwrap()
             .unwrap();
-        assert_eq!(got["home_assistant"], json!({ "enabled": true, "url": "http://homeassistant.local:8123", "event": "deck", "token_set": true }));
+        assert_eq!(
+            got["home_assistant"],
+            json!({ "enabled": true, "url": "http://homeassistant.local:8123", "event": "deck", "token_set": true })
+        );
         assert!(!got.to_string().contains("abc.def"));
         assert_eq!(shared.read().unwrap().token, "abc.def");
         // a later edit without a token keeps it, and a restart reads it back
-        s.call("setHomeAssistant", &json!({ "event": "other" })).unwrap().unwrap();
+        s.call("setHomeAssistant", &json!({ "event": "other" }))
+            .unwrap()
+            .unwrap();
         let again = settings(&system, &dir);
         assert_eq!(again.ha.read().unwrap().token, "abc.def");
         assert_eq!(again.ha.read().unwrap().event, "other");
-        s.call("setHomeAssistant", &json!({ "enabled": false, "clear_token": true })).unwrap().unwrap();
+        s.call(
+            "setHomeAssistant",
+            &json!({ "enabled": false, "clear_token": true }),
+        )
+        .unwrap()
+        .unwrap();
         assert_eq!(shared.read().unwrap().token, "");
     }
 
@@ -588,16 +736,31 @@ mod tests {
         let (system, dir) = (up(), scratch());
         let mut s = settings(&system, &dir);
         // turning events on needs somewhere to send them
-        assert!(s.call("setHomeAssistant", &json!({ "enabled": true })).unwrap().is_err());
-        assert!(s.call("setHomeAssistant", &json!({ "url": "https://ha" })).unwrap().unwrap_err().contains("TLS"));
-        assert!(s.call("setHomeAssistant", &json!({ "event": "bad name" })).unwrap().is_err());
-        assert!(s.call("setHomeAssistant", &json!({ "token": "has space" })).unwrap().is_err());
+        assert!(s
+            .call("setHomeAssistant", &json!({ "enabled": true }))
+            .unwrap()
+            .is_err());
+        assert!(s
+            .call("setHomeAssistant", &json!({ "url": "https://ha" }))
+            .unwrap()
+            .unwrap_err()
+            .contains("TLS"));
+        assert!(s
+            .call("setHomeAssistant", &json!({ "event": "bad name" }))
+            .unwrap()
+            .is_err());
+        assert!(s
+            .call("setHomeAssistant", &json!({ "token": "has space" }))
+            .unwrap()
+            .is_err());
         assert!(!dir.join("ha.json").exists());
     }
 
     #[test]
     fn other_methods_are_not_settings() {
         let (system, dir) = (up(), scratch());
-        assert!(settings(&system, &dir).call("setBacklight", &Value::Null).is_none());
+        assert!(settings(&system, &dir)
+            .call("setBacklight", &Value::Null)
+            .is_none());
     }
 }

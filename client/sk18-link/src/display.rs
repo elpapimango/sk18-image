@@ -6,17 +6,28 @@ use zune_jpeg::JpegDecoder;
 
 /// Decodes `jpeg`, which must be exactly `width` x `height`, into `out` as 32-bit XRGB8888 rows of `stride` bytes
 /// (the kernel's framebuffer format: bytes B, G, R, X in memory). Row padding beyond `width * 4` is left as it is.
-pub fn jpeg_to_xrgb(jpeg: &[u8], width: usize, height: usize, stride: usize, out: &mut Vec<u8>) -> Result<(), String> {
+pub fn jpeg_to_xrgb(
+    jpeg: &[u8],
+    width: usize,
+    height: usize,
+    stride: usize,
+    out: &mut Vec<u8>,
+) -> Result<(), String> {
     let options = DecoderOptions::default().jpeg_set_out_colorspace(ColorSpace::RGB);
     let mut decoder = JpegDecoder::new_with_options(jpeg, options);
-    let rgb = decoder.decode().map_err(|e| format!("cannot decode the JPEG: {e:?}"))?;
+    let rgb = decoder
+        .decode()
+        .map_err(|e| format!("cannot decode the JPEG: {e:?}"))?;
     let info = decoder.info().ok_or("the JPEG has no header")?;
     let (w, h) = (usize::from(info.width), usize::from(info.height));
     if (w, h) != (width, height) {
         return Err(format!("the picture is {w}x{h}, the screen is {width}x{height}"));
     }
     if rgb.len() != w * h * 3 || stride < w * 4 {
-        return Err(format!("unexpected decoded size {} for {w}x{h} (stride {stride})", rgb.len()));
+        return Err(format!(
+            "unexpected decoded size {} for {w}x{h} (stride {stride})",
+            rgb.len()
+        ));
     }
 
     out.resize(stride * height, 0);
@@ -52,10 +63,26 @@ mod tests {
         jpeg_to_xrgb(QUADRANTS, W, H, W * 4, &mut out).unwrap();
         assert_eq!(out.len(), W * H * 4);
         let at = |x, y| px(&out, W * 4, x, y);
-        assert!(near(at(180, 320), [255, 0, 0]), "top left should be red, got {:?}", at(180, 320));
-        assert!(near(at(540, 320), [0, 255, 0]), "top right should be green, got {:?}", at(540, 320));
-        assert!(near(at(180, 960), [0, 0, 255]), "bottom left should be blue, got {:?}", at(180, 960));
-        assert!(near(at(540, 960), [255, 255, 255]), "bottom right should be white, got {:?}", at(540, 960));
+        assert!(
+            near(at(180, 320), [255, 0, 0]),
+            "top left should be red, got {:?}",
+            at(180, 320)
+        );
+        assert!(
+            near(at(540, 320), [0, 255, 0]),
+            "top right should be green, got {:?}",
+            at(540, 320)
+        );
+        assert!(
+            near(at(180, 960), [0, 0, 255]),
+            "bottom left should be blue, got {:?}",
+            at(180, 960)
+        );
+        assert!(
+            near(at(540, 960), [255, 255, 255]),
+            "bottom right should be white, got {:?}",
+            at(540, 960)
+        );
     }
 
     #[test]
@@ -72,7 +99,12 @@ mod tests {
         jpeg_to_xrgb(QUADRANTS, W, H, stride, &mut out).unwrap();
         assert_eq!(out.len(), stride * H);
         for y in [0, 500, H - 1] {
-            assert!(out[y * stride + W * 4..(y + 1) * stride].iter().all(|&b| b == 0x77), "row {y}");
+            assert!(
+                out[y * stride + W * 4..(y + 1) * stride]
+                    .iter()
+                    .all(|&b| b == 0x77),
+                "row {y}"
+            );
         }
         assert!(near(px(&out, stride, 180, 320), [255, 0, 0]));
     }

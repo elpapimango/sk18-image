@@ -27,7 +27,11 @@ const fn crc_table() -> [u32; 256] {
         let mut c = i as u32;
         let mut bit = 0;
         while bit < 8 {
-            c = if c & 1 != 0 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 };
+            c = if c & 1 != 0 {
+                0xEDB8_8320 ^ (c >> 1)
+            } else {
+                c >> 1
+            };
             bit += 1;
         }
         table[i] = c;
@@ -61,12 +65,20 @@ pub struct Frame {
 impl Frame {
     /// A JSON frame.
     pub fn json(id: u32, body: &serde_json::Value) -> Self {
-        Self { id, cmd: CMD_JSON, data: body.to_string().into_bytes() }
+        Self {
+            id,
+            cmd: CMD_JSON,
+            data: body.to_string().into_bytes(),
+        }
     }
 
     /// The reply to an image frame: the same id, no data.
     pub fn image_shown(id: u32) -> Self {
-        Self { id, cmd: CMD_SHOW_JPG, data: Vec::new() }
+        Self {
+            id,
+            cmd: CMD_SHOW_JPG,
+            data: Vec::new(),
+        }
     }
 
     /// The bytes to put on the wire.
@@ -185,7 +197,11 @@ impl FrameDecoder {
                 self.buffer.drain(..HEADER.len());
                 continue;
             }
-            let frame = Frame { id: u32_at(&self.buffer, 4), cmd: u32_at(&self.buffer, 8), data: data.to_vec() };
+            let frame = Frame {
+                id: u32_at(&self.buffer, 4),
+                cmd: u32_at(&self.buffer, 8),
+                data: data.to_vec(),
+            };
             self.buffer.drain(..total);
             return Some(frame);
         }
@@ -205,7 +221,11 @@ mod tests {
 
     #[test]
     fn a_frame_round_trips() {
-        let f = Frame { id: 7, cmd: CMD_JSON, data: br#"{"method":"getInfo"}"#.to_vec() };
+        let f = Frame {
+            id: 7,
+            cmd: CMD_JSON,
+            data: br#"{"method":"getInfo"}"#.to_vec(),
+        };
         let mut d = FrameDecoder::new();
         d.push(&f.encode());
         assert_eq!(d.next_frame(), Some(f));
@@ -215,7 +235,11 @@ mod tests {
 
     #[test]
     fn the_layout_on_the_wire_is_the_documented_one() {
-        let f = Frame { id: 1, cmd: CMD_SHOW_JPG, data: vec![0xAB, 0xCD] };
+        let f = Frame {
+            id: 1,
+            cmd: CMD_SHOW_JPG,
+            data: vec![0xAB, 0xCD],
+        };
         let w = f.encode();
         assert_eq!(&w[..4], &[0xA1, 0xA5, 0x5A, 0x5E]);
         assert_eq!(&w[4..8], &1u32.to_le_bytes());
@@ -237,7 +261,11 @@ mod tests {
     #[test]
     fn any_chunking_gives_the_same_frames() {
         let frames: Vec<Frame> = (0..5)
-            .map(|i| Frame { id: i, cmd: if i % 2 == 0 { CMD_JSON } else { CMD_SHOW_JPG }, data: vec![i as u8; 1 + i as usize * 300] })
+            .map(|i| Frame {
+                id: i,
+                cmd: if i % 2 == 0 { CMD_JSON } else { CMD_SHOW_JPG },
+                data: vec![i as u8; 1 + i as usize * 300],
+            })
             .collect();
         let wire: Vec<u8> = frames.iter().flat_map(Frame::encode).collect();
         for chunk in [1usize, 2, 7, 19, 64, 4096] {
@@ -255,8 +283,16 @@ mod tests {
 
     #[test]
     fn noise_in_front_and_between_frames_is_skipped() {
-        let a = Frame { id: 1, cmd: CMD_JSON, data: b"{}".to_vec() };
-        let b = Frame { id: 2, cmd: CMD_JSON, data: b"[]".to_vec() };
+        let a = Frame {
+            id: 1,
+            cmd: CMD_JSON,
+            data: b"{}".to_vec(),
+        };
+        let b = Frame {
+            id: 2,
+            cmd: CMD_JSON,
+            data: b"[]".to_vec(),
+        };
         let mut wire = vec![0u8; 1000]; // the host's start-up padding of zero bytes
         wire.extend_from_slice(&a.encode());
         wire.extend_from_slice(&[0xA1, 0xA5, 0x00, 0x13, 0x37]); // a header-looking stub
@@ -270,10 +306,24 @@ mod tests {
 
     #[test]
     fn a_bad_size_crc_or_data_crc_drops_the_frame_and_finds_the_next() {
-        let good = Frame { id: 9, cmd: CMD_JSON, data: b"{\"x\":1}".to_vec() };
-        let mut bad_size = Frame { id: 1, cmd: CMD_JSON, data: b"abc".to_vec() }.encode();
+        let good = Frame {
+            id: 9,
+            cmd: CMD_JSON,
+            data: b"{\"x\":1}".to_vec(),
+        };
+        let mut bad_size = Frame {
+            id: 1,
+            cmd: CMD_JSON,
+            data: b"abc".to_vec(),
+        }
+        .encode();
         bad_size[16] ^= 0xFF;
-        let mut bad_data = Frame { id: 2, cmd: CMD_JSON, data: b"abc".to_vec() }.encode();
+        let mut bad_data = Frame {
+            id: 2,
+            cmd: CMD_JSON,
+            data: b"abc".to_vec(),
+        }
+        .encode();
         let n = bad_data.len();
         bad_data[n - 1] ^= 0x01;
         let mut d = FrameDecoder::new();
@@ -286,7 +336,12 @@ mod tests {
 
     #[test]
     fn an_absurd_size_is_noise_not_an_allocation() {
-        let mut w = Frame { id: 1, cmd: CMD_JSON, data: vec![] }.encode();
+        let mut w = Frame {
+            id: 1,
+            cmd: CMD_JSON,
+            data: vec![],
+        }
+        .encode();
         let huge = (MAX_DATA_LEN as u32 + 1).to_le_bytes();
         w[12..16].copy_from_slice(&huge);
         w[16..20].copy_from_slice(&crc32(&huge).to_le_bytes()); // a valid size CRC for a huge size
@@ -298,7 +353,11 @@ mod tests {
 
     #[test]
     fn a_header_split_across_pushes_is_not_lost() {
-        let f = Frame { id: 3, cmd: CMD_JSON, data: b"{}".to_vec() };
+        let f = Frame {
+            id: 3,
+            cmd: CMD_JSON,
+            data: b"{}".to_vec(),
+        };
         let w = f.encode();
         let mut d = FrameDecoder::new();
         d.push(&w[..2]);

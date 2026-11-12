@@ -47,7 +47,10 @@ mod run {
 
     impl Port {
         fn open(path: &std::path::Path) -> io::Result<Self> {
-            if path.file_name().is_some_and(|n| n.to_string_lossy().starts_with("hidg")) {
+            if path
+                .file_name()
+                .is_some_and(|n| n.to_string_lossy().starts_with("hidg"))
+            {
                 let file = std::fs::OpenOptions::new().read(true).write(true).open(path)?;
                 Ok(Self::Hid(HidPort::new(file)))
             } else {
@@ -117,12 +120,23 @@ mod run {
         if let Some(port) = link.lock().expect("link lock").as_mut() {
             let bytes = frame.encode();
             if verbose {
-                eprintln!("sk18-link: [{} ms] reply id {} cmd {} ({} bytes): writing", ms(), frame.id, frame.cmd, bytes.len());
+                eprintln!(
+                    "sk18-link: [{} ms] reply id {} cmd {} ({} bytes): writing",
+                    ms(),
+                    frame.id,
+                    frame.cmd,
+                    bytes.len()
+                );
             }
             // A failed write means the host went away; the read side notices and reconnects.
             let r = port.write_all(&bytes);
             if verbose {
-                eprintln!("sk18-link: [{} ms] reply id {} written: {:?}", ms(), frame.id, r.map_err(|e| e.to_string()));
+                eprintln!(
+                    "sk18-link: [{} ms] reply id {} written: {:?}",
+                    ms(),
+                    frame.id,
+                    r.map_err(|e| e.to_string())
+                );
             }
         }
     }
@@ -141,7 +155,12 @@ mod run {
                         decoder.push(&buf[..n], |frame| {
                             if let KeyFrame::Key(k) = frame {
                                 if verbose {
-                                    eprintln!("sk18-link: key ({}, {}) {}", k.row, k.col, if k.pressed { "down" } else { "up" });
+                                    eprintln!(
+                                        "sk18-link: key ({}, {}) {}",
+                                        k.row,
+                                        k.col,
+                                        if k.pressed { "down" } else { "up" }
+                                    );
                                 }
                                 send(&link, &key_event(k.row, k.col, k.pressed), verbose);
                                 // Home Assistant hears about the key as the viewer counts it (3 rows by 6 columns).
@@ -161,7 +180,12 @@ mod run {
     pub fn main(o: Options) -> Result<(), String> {
         let hw = LinuxHardware::open(&o.fb, &o.backlight, o.verbose)?;
         let ha = SharedHa::default();
-        let mut device = Device::new(hw).with_settings(Box::new(SystemSettings::new(LinuxSystem, WPA_CONF, HA_CONF, ha.clone())));
+        let mut device = Device::new(hw).with_settings(Box::new(SystemSettings::new(
+            LinuxSystem,
+            WPA_CONF,
+            HA_CONF,
+            ha.clone(),
+        )));
         let notifier = Notifier::spawn(ha);
         let link: Link = Arc::new(Mutex::new(None));
 
@@ -184,7 +208,9 @@ mod run {
                 }
             };
             waiting_reported = false;
-            let writer = port.try_clone().map_err(|e| format!("{}: {e}", o.port.display()))?;
+            let writer = port
+                .try_clone()
+                .map_err(|e| format!("{}: {e}", o.port.display()))?;
             *link.lock().expect("link lock") = Some(writer);
             if o.verbose {
                 eprintln!("sk18-link: {} open", o.port.display());
@@ -193,7 +219,8 @@ mod run {
             let mut decoder = FrameDecoder::new();
             let mut buf = vec![0u8; 64 * 1024];
             // Counters for the verbose log: what the read loop is doing (decision D-037).
-            let (mut polls, mut timeouts, mut reads, mut bytes, mut waiting_hits) = (0u64, 0u64, 0u64, 0u64, 0u64);
+            let (mut polls, mut timeouts, mut reads, mut bytes, mut waiting_hits) =
+                (0u64, 0u64, 0u64, 0u64, 0u64);
             let mut last_stats = std::time::Instant::now();
             loop {
                 if o.verbose && last_stats.elapsed() >= Duration::from_secs(2) {
@@ -231,13 +258,23 @@ mod run {
                             }
                             if let Some(bad) = decoder.take_bad_frame() {
                                 let _ = std::fs::write("/tmp/bad-frame.bin", &bad);
-                                eprintln!("sk18-link: [{} ms] wrote /tmp/bad-frame.bin ({} bytes)", ms(), bad.len());
+                                eprintln!(
+                                    "sk18-link: [{} ms] wrote /tmp/bad-frame.bin ({} bytes)",
+                                    ms(),
+                                    bad.len()
+                                );
                             }
                         }
                         let mut next = frame_or_none;
                         while let Some(frame) = next.take() {
                             if o.verbose {
-                                eprintln!("sk18-link: [{} ms] frame id {} cmd {} ({} bytes) received", ms(), frame.id, frame.cmd, frame.data.len());
+                                eprintln!(
+                                    "sk18-link: [{} ms] frame id {} cmd {} ({} bytes) received",
+                                    ms(),
+                                    frame.id,
+                                    frame.cmd,
+                                    frame.data.len()
+                                );
                             }
                             for reply in device.handle(&frame) {
                                 send(&link, &reply, o.verbose);
@@ -250,7 +287,9 @@ mod run {
             *link.lock().expect("link lock") = None;
             if o.verbose {
                 let (shown, failed) = device.counters();
-                eprintln!("sk18-link: host disconnected ({shown} pictures shown, {failed} failed); reopening");
+                eprintln!(
+                    "sk18-link: host disconnected ({shown} pictures shown, {failed} failed); reopening"
+                );
             }
             thread::sleep(Duration::from_millis(500));
         }

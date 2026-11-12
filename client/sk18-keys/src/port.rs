@@ -15,7 +15,11 @@ pub const BAUD: u32 = 115_200;
 /// Opens `path` read-only and sets it up as a raw 115200 8N1 line without flow control, then drops
 /// whatever is already queued so the first frame read starts at a clean point.
 pub fn open_port(path: &Path) -> io::Result<File> {
-    let fd = open(path, OFlags::RDONLY | OFlags::NOCTTY | OFlags::CLOEXEC, Mode::empty())?;
+    let fd = open(
+        path,
+        OFlags::RDONLY | OFlags::NOCTTY | OFlags::CLOEXEC,
+        Mode::empty(),
+    )?;
     let mut t = tcgetattr(&fd)?;
     t.make_raw();
     t.set_input_speed(BAUD)?;

@@ -69,6 +69,12 @@ jobs:
           # SPL at 8 KiB: the boot ROM looks for the eGON header there
           [ "$(dd if="$img" bs=1 skip=$((8192 + 4)) count=8 status=none)" = "eGON.BT0" ]
           echo "version in the image:"; debugfs -R 'cat /etc/sk18-release' "$HOME/sk18-build/images/rootfs.ext4" 2>/dev/null
+          # init runs only executable scripts: a 0644 S00splash means a black screen and no USB (release 0.1.0 had that)
+          for f in /etc/init.d/S00splash /etc/init.d/S01usb-gadget /etc/init.d/S90sk18-link /usr/sbin/sk18-wlan-up /usr/bin/sk18-link /usr/bin/sk18-keys /usr/bin/sk18-splash; do
+            mode=$(debugfs -R "stat $f" "$HOME/sk18-build/images/rootfs.ext4" 2>/dev/null | grep -m1 -o 'Mode:  *[0-7]*' | awk '{print $2}')
+            echo "$f $mode"
+            case "$mode" in 0755) ;; *) echo "$f must be 0755 in the image" >&2; exit 1 ;; esac
+          done
 
       - name: Pack for balenaEtcher
         run: tools/build/release.sh "${{ steps.version.outputs.version }}" --out dist --image "$HOME/sk18-build/images/sdcard.img"

@@ -40,6 +40,13 @@ jobs:
       - uses: actions/checkout@v4
       - name: shellcheck
         run: shellcheck -S warning tools/build/*.sh br2-external/board/waveshare/sk18/post-build.sh
+      - name: Scripts that run on the board or in the build are executable in git
+        run: |
+          # A file committed from Windows is 100644 unless told otherwise, and a checkout on Linux then keeps it non-executable:
+          # init skips such a script (no splash, no USB gadget, no deck link) and the build scripts cannot be run.
+          bad=$(git ls-files -s br2-external/board/waveshare/sk18/overlay/etc/init.d br2-external/board/waveshare/sk18/overlay/usr/sbin \
+                  br2-external/board/waveshare/sk18/post-build.sh tools/build | awk '$1 != "100755" {print $1, $4}')
+          [ -z "$bad" ] || { echo "not executable in git:"; echo "$bad"; exit 1; }
       - name: Buildroot pin is a full commit
         run: grep -Eq '^[0-9a-f]{40}$' tools/build/BUILDROOT_COMMIT
       - name: Changelog has the client version

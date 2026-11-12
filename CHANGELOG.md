@@ -6,6 +6,16 @@ A release is made by pushing the tag `v<version>`: the `Release` workflow builds
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-12
+
+### Fixed
+- **0.1.0 does not work on the board: the screen stays black and there is no USB device.** The init scripts (`S00splash`,
+  `S01usb-gadget`, `S90sk18-link`) and `sk18-wlan-up` had been committed from Windows without the executable bit, the image is
+  built from a Git checkout on Linux, and init skips a script that is not executable: no boot animation, no USB gadget, no deck
+  link. The kernel and root file system came up normally. Do not use 0.1.0; flash 0.1.1.
+- The executable bit is set in git for those files (and the scripts under `tools/`), CI checks the modes in git, and the release
+  build checks the modes inside the finished image and fails if an init script is not `0755`.
+
 ## [0.1.0] - 2026-11-12
 
 First release.

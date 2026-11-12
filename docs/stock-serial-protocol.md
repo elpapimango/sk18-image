@@ -76,6 +76,38 @@ the next one), so the host paints at the device's pace.
   was not measured).
 - Repainting a key white while pressed and back on release kept up with finger speed.
 
+## Replies recorded from a real SK-18 with stock V2.31 (2026-11-12, `tools/stock/stock_probe.py`)
+
+The session is kept in `docs/captures/stock-v2.31-probe.jsonl` (and as the fixture of `client/sk18-link/tests/stock_conformance.rs`);
+the USB descriptors in `stock-v2.31-lsusb.txt`. Every reply is a cmd 101 frame with the request's id.
+
+| Request | Stock reply |
+|---|---|
+| `setBacklight` `{"level": 0..100}` | `{"ack_method":"setBacklight","success":true,"result":<level>}` (the level is echoed; 55.5 gave 0) |
+| `setBacklight` without `level` | error `Missing 'level' parameter` |
+| `setBacklight` with a string, null or bool | error `'level' must be a number` |
+| `setBacklight` 300 or -1 | error `Backlight level must be between 0 and 100, got 300` |
+| `setVolume` 0..7 | success, `result` the level; 50 or -1: `Volume level must be between 0 and 7, got 50` |
+| `stopAudio` | success, no `result` |
+| `playAudio` | `Missing 'filePath' parameter`, or `File does not exist: <path>` |
+| `getFilesBySuffix` | `Missing 'suffixs' parameter`; with a list: `{"filePaths": [...]}` (an empty suffix list returned the device's theme files, `/data/theme/SK18/*.Theme` with a `crc`) |
+| `keyboardInput` without `inputString` | `Missing 'inputString' parameter` |
+| unknown method | error `Unknown method: X. Available methods: [deleteFiles, getFilesBySuffix, getInfo, keyboardInput, playAudio, saveToFile, setBacklight, setFileCRC, setVolume, stopAudio]` |
+| `parameters` that is not an object | `{"success":false,"errorString":"Field 'parameters' must be an object"}` (no `ack_method`) |
+| a picture that cannot be decoded | **no echo**; a JSON frame with id `0xFFFFFFFF`: `{"errorString":"Image decoding failed, the image size may be larger than 720x1280","requestId":<id>}` |
+| a frame with a bad data CRC | no reply; the next good frame is answered normally |
+| 4 KiB of `0` bytes before a frame | the frame is answered (the parser resynchronises) |
+
+`getInfo` is as above (V2.31, key rectangles at x = 63 + 218 col, y = 10 + 218 row). Not tried, because they change the device:
+`saveToFile`, `setFileCRC`, `deleteFiles`, a real `playAudio` and `keyboardInput` with text. Touch events were not captured in
+this session (nobody touched the panel during the window).
+
+**USB behaviour of the stock card:** `1d6b:0104`, `bcdDevice 5.04`, strings `Allwinner Technology Inc.` / `Serial`, no serial number,
+CDC ACM (interface association, control + data), self-powered, 500 mA. In three of four sessions the device disconnected and
+re-enumerated once within seconds of the first requests after it had been plugged in (a later 60-second session was stable);
+the Stream Deck XL on the same hub dropped once with it (hub reset), so a power or hub effect is possible and was not
+investigated.
+
 ## Still to verify
 
 Whether the device has physical buttons that produce events, the valid range and effect of

@@ -109,7 +109,17 @@ fn this_firmware_answers_like_the_recorded_stock_firmware() {
 
         assert_eq!(ours.len(), stock.len(), "{label}: number of answers");
         for (ours, stock) in ours.iter().zip(&stock) {
-            assert_eq!(ours.id as u64, stock["id"].as_u64().unwrap(), "{label}: id");
+            // The ids of frames the device sends on its own count down from 0xFFFFFFFF; the ones it answers carry the request's.
+            let stock_id = stock["id"].as_u64().unwrap();
+            if stock_id >= 0x8000_0000 {
+                assert!(
+                    ours.id >= 0x8000_0000,
+                    "{label}: a device-originated id, got {:#x}",
+                    ours.id
+                );
+            } else {
+                assert_eq!(ours.id as u64, stock_id, "{label}: id");
+            }
             assert_eq!(ours.cmd as u64, stock["cmd"].as_u64().unwrap(), "{label}: cmd");
             let (ours, stock) = (json_of(ours), stock["json"].clone());
             match label {
@@ -137,4 +147,43 @@ fn this_firmware_answers_like_the_recorded_stock_firmware() {
     }
     // every recorded step was replayed (the recording has 30 that carry a request or a picture)
     assert!(checked >= 28, "only {checked} steps were replayed");
+}
+
+/// 182 key events recorded from the stock firmware while every key of the panel was touched.
+const TOUCH: &str = include_str!("data/stock-v2.31-touch.jsonl");
+
+#[test]
+fn key_events_look_like_the_recorded_stock_events() {
+    use sk18_link::device::key_event;
+    let entry: Value = serde_json::from_str(TOUCH.lines().next().unwrap()).unwrap();
+    let events = entry["rx"].as_array().unwrap();
+    assert!(events.len() > 100);
+    let mut covered = std::collections::BTreeSet::new();
+    let mut last_stock = None;
+    let mut last_ours: Option<u32> = None;
+    for stock in events {
+        // the same key and state give the same JSON
+        let p = &stock["json"]["parameters"];
+        let (row, col) = (p["row"].as_u64().unwrap() as u8, p["col"].as_u64().unwrap() as u8);
+        covered.insert((row, col));
+        let ours = key_event(row, col, p["pressed"].as_bool().unwrap());
+        assert_eq!(json_of(&ours), stock["json"], "event JSON");
+        assert_eq!(ours.cmd as u64, stock["cmd"].as_u64().unwrap());
+        // ids of device-originated frames count down by one, from the top of the range, in both
+        let id = stock["id"].as_u64().unwrap();
+        if let Some(previous) = last_stock {
+            assert_eq!(previous - 1, id, "stock ids count down by one");
+        }
+        if let Some(previous) = last_ours {
+            assert_eq!(previous.wrapping_sub(1), ours.id, "our ids count down by one");
+        }
+        assert!(ours.id >= 0x8000_0000);
+        last_stock = Some(id);
+        last_ours = Some(ours.id);
+    }
+    assert_eq!(
+        covered.len(),
+        18,
+        "every key of the 3 x 6 panel was touched in the recording"
+    );
 }

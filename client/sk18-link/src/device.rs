@@ -15,6 +15,8 @@
 
 use serde_json::{json, Value};
 
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use crate::protocol::{Frame, CMD_JSON, CMD_SHOW_JPG};
 use crate::settings::Settings;
 
@@ -65,10 +67,17 @@ pub fn info() -> Value {
     })
 }
 
+/// The id of the next frame the device sends on its own (events, and the error for a picture): the stock firmware counts
+/// these down from `0xFFFFFFFF`, one per frame, so they never collide with the host's ids (recorded 2026-11-12).
+pub fn next_device_frame_id() -> u32 {
+    static NEXT: AtomicU32 = AtomicU32::new(u32::MAX);
+    NEXT.fetch_sub(1, Ordering::Relaxed)
+}
+
 /// A `keyStateChanged` event for the key at firmware position `(row, col)`.
 pub fn key_event(row: u8, col: u8, pressed: bool) -> Frame {
     Frame::json(
-        0,
+        next_device_frame_id(),
         &json!({ "method": "keyStateChanged", "parameters": { "col": col, "row": row, "pressed": pressed } }),
     )
 }
@@ -128,7 +137,7 @@ impl<H: Hardware> Device<H> {
                     eprintln!("sk18-link: image not shown: {e}");
                     // As the stock firmware does: an error frame instead of the picture's echo.
                     vec![Frame::json(
-                        u32::MAX,
+                        next_device_frame_id(),
                         &json!({ "errorString": IMAGE_ERROR, "requestId": frame.id }),
                     )]
                 }
@@ -373,7 +382,12 @@ mod tests {
             data: vec![0xFF],
         });
         assert_eq!(out.len(), 1);
-        assert_eq!((out[0].id, out[0].cmd), (u32::MAX, CMD_JSON));
+        assert!(
+            out[0].id >= 0x8000_0000,
+            "a device-originated id: {:#x}",
+            out[0].id
+        );
+        assert_eq!(out[0].cmd, CMD_JSON);
         assert_eq!(
             json_of(&out[0]),
             json!({ "errorString": IMAGE_ERROR, "requestId": 8 })
@@ -602,7 +616,8 @@ mod tests {
     #[test]
     fn key_events_use_col_row_and_the_documented_shape() {
         let f = key_event(5, 0, true);
-        assert_eq!((f.id, f.cmd), (0, CMD_JSON));
+        assert_eq!(f.cmd, CMD_JSON);
+        assert!(f.id >= 0x8000_0000, "{:#x}", f.id);
         assert_eq!(
             json_of(&f),
             json!({ "method": "keyStateChanged", "parameters": { "col": 0, "row": 5, "pressed": true } })

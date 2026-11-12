@@ -98,9 +98,10 @@ the USB descriptors in `stock-v2.31-lsusb.txt`. Every reply is a cmd 101 frame w
 | a frame with a bad data CRC | no reply; the next good frame is answered normally |
 | 4 KiB of `0` bytes before a frame | the frame is answered (the parser resynchronises) |
 
-`getInfo` is as above (V2.31, key rectangles at x = 63 + 218 col, y = 10 + 218 row). Not tried, because they change the device:
-`saveToFile`, `setFileCRC`, `deleteFiles`, a real `playAudio` and `keyboardInput` with text. Touch events were not captured in
-this session (nobody touched the panel during the window).
+`getInfo` is as above (V2.31, key rectangles at x = 63 + 218 col, y = 10 + 218 row). **Touch events** (`docs/captures/stock-v2.31-touch.jsonl`, 182 events, every one of the 18 keys touched): `{"method":"keyStateChanged","parameters":{"col":c,"pressed":bool,"row":r}}`, cmd 101, strictly alternating press and release (a press about 170 ms before its release when tapped), rows 0 to 5 and columns 0 to 2. **Their frame ids count down by one from `0xFFFFFFFF`** (they are device-originated; the picture error frame takes the next number of the same counter), so they never collide with the host's ids. `sk18-link` does the same now and is tested against this recording.
+
+Not tried, because they change the device:
+`saveToFile`, `setFileCRC`, `deleteFiles`, a real `playAudio` and `keyboardInput` with text.
 
 **USB behaviour of the stock card:** `1d6b:0104`, `bcdDevice 5.04`, strings `Allwinner Technology Inc.` / `Serial`, no serial number,
 CDC ACM (interface association, control + data), self-powered, 500 mA. In three of four sessions the device disconnected and
